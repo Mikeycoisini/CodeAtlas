@@ -1,0 +1,10 @@
+{
+  "migration": "V4->V6 existing baseline migrations",
+  "productVersion": "0.4.1",
+  "oldRecordsCompared": 10,
+  "oldReviewTrainingEvidenceGuidesPreserved": true,
+  "fixedSourceRestored": true,
+  "oldGenerationGraphRestored": true,
+  "rebuildKeptOldGraph": true,
+  "newGeneration": "d0824212-975a-40d3-8c28-be8be2151c72"
+}

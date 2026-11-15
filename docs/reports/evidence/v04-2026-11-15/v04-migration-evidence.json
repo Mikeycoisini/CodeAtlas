@@ -1,0 +1,10 @@
+{
+  "migration": "V3->V4",
+  "version": "0.4.0",
+  "oldDocumentPreserved": true,
+  "oldCardAndTrainingPreserved": true,
+  "immutableReviewEventsRestored": 2,
+  "reviewStateDueAndConfigRestored": true,
+  "evidenceAndAssessmentRestored": true,
+  "exitedGuideStepsRestored": true
+}

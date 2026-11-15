@@ -1,0 +1,8 @@
+target/
+.idea/
+data/
+config/
+.env
+*.log
+.superpowers/
+.m2/

@@ -1,0 +1,9 @@
+{
+  "artifact": "io.github.open-spaced-repetition:fsrs:1.0.0",
+  "sha256": "ddb3f34e99cc5c1e36bafceed6526b8dbb43ebc4d3c19df747f5d587022612df",
+  "commit": "c561ee6c56239b621a0a45b16a6c2e688441eae5",
+  "tests": 6,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0
+}

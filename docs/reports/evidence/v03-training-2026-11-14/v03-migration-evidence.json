@@ -1,0 +1,14 @@
+{
+  "migration": "V2->V3",
+  "oldDocumentPreserved": true,
+  "attemptRestored": true,
+  "frozenFieldsVerified": [
+    "taskRevision",
+    "definitionDigest",
+    "answers",
+    "results",
+    "reveals",
+    "submissionDigest"
+  ],
+  "version": "0.3.0"
+}

@@ -1,0 +1,7 @@
+{
+  "artifact": "codeatlas-0.4.0.jar",
+  "sha256": "833d41fbcf736fef71da9f156dc488c400c7362b89027d766db9c2812d0bb849",
+  "bytes": 32991043,
+  "configuration": "environment-variable template",
+  "staticResources": "current dist only"
+}

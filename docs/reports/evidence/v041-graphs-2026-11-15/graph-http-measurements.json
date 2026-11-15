@@ -1,0 +1,26 @@
+{
+  "environment": "local JDK24/MySQL3307, one-type V4 fixture, no large-project claim",
+  "samples": [
+    {
+      "view": "PACKAGE",
+      "nodes": 1,
+      "edges": 0,
+      "warmMedianMilliseconds": 8.91,
+      "firstMilliseconds": 8.64
+    },
+    {
+      "view": "TYPE",
+      "nodes": 1,
+      "edges": 0,
+      "warmMedianMilliseconds": 7.87,
+      "firstMilliseconds": 7.59
+    },
+    {
+      "view": "CALL",
+      "nodes": 1,
+      "edges": 0,
+      "warmMedianMilliseconds": 7.72,
+      "firstMilliseconds": 8.97
+    }
+  ]
+}

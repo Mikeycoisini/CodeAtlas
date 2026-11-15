@@ -1,0 +1,12 @@
+{
+  "StoppedJava": 2,
+  "StoppedPython": 4,
+  "MatchedMySql": 2,
+  "VerifiedClosedPorts": [
+    18080,
+    18083,
+    18001,
+    8002,
+    3307
+  ]
+}
