@@ -1,0 +1,34 @@
+.training-workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; color: var(--text); }
+.training-list { overflow: auto; padding: 18px; background: var(--surface-alt); border-right: 1px solid var(--border); }
+.training-content { overflow: auto; min-width: 0; background: var(--surface); }
+.training-editor, .training-detail { max-width: 1050px; margin: auto; padding: 26px 32px 48px; }
+.training-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.training-heading h2, .training-heading h3 { margin: 0; }
+.training-heading span, .training-workspace small { color: var(--text-muted); overflow-wrap: anywhere; }
+.training-workspace h2 { font-size: 21px; } .training-workspace h3 { font-size: 15px; }
+.training-workspace p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.training-workspace label, .training-workspace fieldset, .training-workspace input, .training-workspace textarea, .training-workspace select { min-width: 0; }
+.training-workspace label { display: flex; flex-direction: column; gap: 7px; margin: 12px 0; font-size: 12px; color: var(--text-secondary); }
+.training-workspace label.authorization { flex-direction: row; align-items: center; }
+.training-workspace input, .training-workspace select, .training-workspace textarea { background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); padding: 9px; border-radius: 5px; }
+.training-workspace textarea { resize: vertical; min-height: 72px; width: 100%; }
+.training-workspace fieldset { margin: 0; padding: 0; border: 0; }
+.training-workspace .field-row > label { flex: 1; }
+.training-list-item { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; width: 100%; margin-bottom: 8px; padding: 12px; text-align: left; overflow-wrap: anywhere; }
+.training-list-item.selected { background: var(--accent-soft); border-color: var(--accent); }
+.training-question { margin: 22px 0; padding: 20px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; }
+.training-question[data-selected="true"] { border-color: var(--accent); outline: 2px solid var(--accent); scroll-margin-top: 16px; }
+.training-prompt { font-size: 15px; }
+.training-sources { margin: 20px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.training-sources details { margin: 12px 0; } .training-sources summary { cursor: pointer; overflow-wrap: anywhere; font-size: 12px; }
+.training-sources small { display: block; margin: 10px 0; } .training-sources pre { max-height: 280px; overflow: auto; background: var(--surface-alt); padding: 14px; }
+.training-reference, .training-hint, .training-ai-feedback { background: var(--accent-soft); padding: 12px; margin: 14px 0; border-radius: 5px; }
+.training-result { border-left: 3px solid var(--accent); padding: 10px 14px; margin: 16px 0; }
+.training-result span { margin-left: 12px; color: var(--text-muted); font-size: 12px; }
+.training-workspace .button-row { flex-wrap: wrap; margin: 14px 0; }
+.training-workspace .ai-panel { color: var(--text); }
+.training-practice { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+.training-practice code, .training-practice pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.training-practice pre { max-height: 280px; overflow: auto; padding: 12px; background: var(--surface-alt); }
+@media (max-width: 1050px) { .training-workspace { grid-template-columns: 230px minmax(0, 1fr); } .training-editor, .training-detail { padding: 22px 18px; } }
+@media (max-width: 720px) { .training-workspace { display: flex; flex-direction: column; overflow: auto; } .training-list { max-height: 240px; flex-shrink: 0; border-bottom: 1px solid var(--border); } .training-content { overflow: visible; } .training-workspace .field-row { flex-direction: column; gap: 0; } }

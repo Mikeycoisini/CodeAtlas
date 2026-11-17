@@ -1,0 +1,16 @@
+ALTER TABLE execution_jobs ADD COLUMN submission_id VARCHAR(36);
+ALTER TABLE execution_jobs ADD COLUMN content_digest VARCHAR(64);
+ALTER TABLE execution_jobs ADD COLUMN idempotency_key VARCHAR(100);
+ALTER TABLE execution_jobs ADD COLUMN request_digest VARCHAR(64);
+ALTER TABLE execution_jobs ADD COLUMN image VARCHAR(200);
+ALTER TABLE execution_jobs ADD COLUMN config_digest VARCHAR(64);
+ALTER TABLE execution_jobs ADD COLUMN container_name VARCHAR(200);
+ALTER TABLE execution_jobs ADD COLUMN container_id VARCHAR(100);
+ALTER TABLE execution_jobs ADD COLUMN result_class VARCHAR(40);
+ALTER TABLE execution_jobs ADD COLUMN cleanup_status VARCHAR(30);
+ALTER TABLE execution_jobs ADD COLUMN cleanup_message TEXT;
+ALTER TABLE execution_jobs ADD COLUMN cancel_requested BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE execution_jobs ADD COLUMN workspace_path VARCHAR(1024);
+ALTER TABLE execution_jobs ADD COLUMN archive_path VARCHAR(1024);
+CREATE INDEX execution_jobs_status ON execution_jobs(status, created_at);
+CREATE INDEX execution_jobs_idempotency ON execution_jobs(idempotency_key);

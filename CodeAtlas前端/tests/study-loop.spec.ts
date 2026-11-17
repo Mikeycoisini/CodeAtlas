@@ -1,0 +1,103 @@
+import { test, expect, type APIRequestContext } from "@playwright/test";
+import { artifact } from "./artifacts";
+import fs from "node:fs";
+import path from "node:path";
+import { backend } from "./study-api";
+
+async function waitTask(request: APIRequestContext, task: { id: string; status: string; snapshotId?: string }) {
+  for (let index = 0; index < 200; index++) {
+    if (!["QUEUED", "RUNNING"].includes(task.status)) { expect(task.status).toBe("SUCCEEDED"); return task; }
+    await new Promise(resolve => setTimeout(resolve, 50)); task = await backend(request, "GET", `/tasks/${task.id}`);
+  }
+  throw new Error("Task timeout");
+}
+
+test("source explanation, knowledge card, understanding task, reviews and optional guide form one learning loop", async ({ page, request }) => {
+  await request.post("http://127.0.0.1:8002/reset", { data: { mode: "NORMAL" } });
+  const root = fs.mkdtempSync(path.resolve("../CodeAtlas后端/target/study-loop-"));
+  fs.writeFileSync(path.join(root, "Example.java"), "class Example { int run() { return 1; } }");
+  const imported = await waitTask(request, await backend(request, "POST", "/imports", { path: root }));
+  await waitTask(request, await backend(request, "POST", `/snapshots/${imported.snapshotId}/index`, { rebuild: false }));
+  const owner = (await backend(request, "GET", "/projects")).find((project: { sourcePath: string }) => project.sourcePath === root);
+  const explorerUrl = `/?view=explore&projectId=${owner.id}&snapshotId=${imported.snapshotId}`;
+  const title = `全链路知识-${crypto.randomUUID().slice(0, 8)}`;
+  await page.goto(explorerUrl);
+  await page.getByRole("button", { name: "符号", exact: true }).click();
+  await page.getByRole("button", { name: /^M run\(\)/ }).click();
+  await page.getByRole("button", { name: "解释源码", exact: true }).click();
+  const explanation = page.getByRole("dialog", { name: "源码解释", exact: true });
+  await explanation.getByRole("button", { name: "预览外发范围", exact: true }).click();
+  await explanation.getByRole("checkbox", { name: "我同意向上述供应商" }).check();
+  await explanation.getByRole("button", { name: "授权并生成", exact: true }).click();
+  await expect(explanation.locator(".generation-status strong")).toHaveText("已完成");
+  await explanation.getByLabel("保存标题", { exact: true }).fill(title);
+  await explanation.getByLabel("保存正文", { exact: true }).fill("固定源码 run 通过 return 1 返回整数一。");
+  await explanation.getByRole("button", { name: "提炼为知识", exact: true }).click();
+  await expect(page.getByLabel("标题", { exact: true })).toHaveValue(title);
+  const knowledgeId = new URL(page.url()).searchParams.get("recordId")!;
+  await page.getByRole("button", { name: "从知识创建卡片", exact: true }).click();
+  await page.getByLabel("问题", { exact: true }).fill("run 返回值是什么？");
+  await page.getByLabel("答案", { exact: true }).fill("整数 1");
+  await page.getByRole("button", { name: "保存卡片", exact: true }).click();
+  await expect(page.locator(".learning-success")).toContainText("已保存");
+  await page.getByRole("button", { name: "加入复习", exact: true }).click();
+  await page.getByRole("button", { name: "开始复习", exact: true }).click();
+  await page.getByLabel("回忆内容", { exact: true }).fill("返回 1");
+  await page.getByRole("button", { name: "查看答案", exact: true }).click();
+  await page.getByRole("button", { name: "记住", exact: true }).click();
+  await expect(page.locator(".review-result")).toContainText("下次复习");
+  await page.getByRole("button", { name: "再次复习", exact: true }).click();
+  await page.getByRole("button", { name: "查看答案", exact: true }).click();
+  await page.getByRole("button", { name: "简单", exact: true }).click();
+  await expect(page.locator(".review-result")).toContainText("下次复习");
+
+  await page.goto(explorerUrl);
+  await page.getByRole("button", { name: "符号", exact: true }).click();
+  await page.getByRole("button", { name: /^M run\(\)/ }).click();
+  await page.getByRole("button", { name: "创建训练任务", exact: true }).click();
+  await page.getByLabel("任务标题", { exact: true }).fill(`全链路任务-${title}`);
+  await page.getByLabel("学习目标", { exact: true }).fill("识别固定返回值");
+  await page.getByLabel("验收条件", { exact: true }).fill("对照源码作答");
+  await page.getByLabel("第1题题干", { exact: true }).fill("run 返回整数 1？");
+  await page.getByLabel("第1题题型", { exact: true }).selectOption("TRUE_FALSE");
+  await page.getByLabel("第1题参考答案", { exact: true }).selectOption("true");
+  await page.getByLabel("第1题参考解释", { exact: true }).fill("return 1");
+  await page.getByRole("button", { name: "发布任务", exact: true }).click();
+  await page.getByRole("button", { name: "开始作答", exact: true }).click();
+  await page.getByLabel("第1题回答", { exact: true }).selectOption("true");
+  await page.getByRole("button", { name: "提交回答", exact: true }).click();
+  await page.locator(".training-question").getByRole("button", { name: "关联知识", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "关联知识", exact: true });
+  await picker.getByLabel("搜索关联知识", { exact: true }).fill(title);
+  await picker.getByRole("button", { name: title, exact: false }).click();
+  await expect(picker).toHaveCount(0);
+  await page.goto(`/?view=progress&progressKnowledgeId=${knowledgeId}`);
+  await expect(page.locator(".progress-assessment")).toContainText("已有支持证据");
+  await expect(page.locator(".evidence-item").filter({ hasText: "规则判分" })).toHaveCount(1);
+  await expect(page.locator(".evidence-item").filter({ hasText: "用户自报" })).toHaveCount(2);
+  await page.locator(".evidence-item").filter({ hasText: "规则判分" }).getByRole("button", { name: "查看原始作答", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "AI辅助反馈", exact: true })).toHaveCount(0);
+  await expect(page.locator(".training-question")).toContainText("回答正确");
+  fs.writeFileSync(path.join(root, "Example.java"), "class Example { int run() { return 2; } }");
+  await page.locator(".training-sources summary").first().click();
+  await page.getByRole("button", { name: "检查当前源码", exact: true }).click();
+  await expect(page.locator(".training-sources")).toContainText("当前源码已变化");
+  await page.getByRole("button", { name: "定位源码", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`snapshotId=${imported.snapshotId}`));
+  await expect(page.getByRole("code")).toContainText("return 1");
+  await page.getByRole("button", { name: "引导", exact: true }).click();
+  await page.getByRole("button", { name: "新建引导", exact: true }).click();
+  await page.getByLabel("引导标题", { exact: true }).fill(`自由复盘-${title}`);
+  await page.getByLabel("引导目标", { exact: true }).fill("结合本次源码、理解题和复习记录自由学习");
+  await page.getByRole("button", { name: "关联知识", exact: true }).click();
+  await picker.getByLabel("搜索关联知识", { exact: true }).fill(title);
+  await picker.getByRole("button", { name: title, exact: false }).click();
+  await page.getByRole("button", { name: "保存引导", exact: true }).click();
+  await expect(page.locator(".guide-step")).toHaveCount(6);
+  await page.locator('.guide-step[data-step-id="CODE"]').getByLabel("步骤状态", { exact: true }).selectOption("SKIPPED");
+  await page.getByRole("button", { name: "退出引导", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "恢复引导", exact: true }).click();
+  await expect(page.locator('.guide-step[data-step-id="CODE"]').getByLabel("步骤状态", { exact: true })).toHaveValue("SKIPPED");
+  await page.screenshot({ path: artifact("v04-learning-loop.png"), fullPage: true });
+});
