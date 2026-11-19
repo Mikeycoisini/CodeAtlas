@@ -1,0 +1,45 @@
+{
+  "baseline": "f41c9b947088cf8e7460d8de55e3ef03a46e28d7",
+  "h2": {
+    "tests": 125,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 4
+  },
+  "mysqlFocused": {
+    "tests": 31,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "mysqlVersion": "8.0.43",
+  "mysqlUpgrade": "V12->V14",
+  "mysqlFresh": "V1->V14",
+  "mysqlRestart": "PASS",
+  "python": {
+    "tests": 14,
+    "failures": 0
+  },
+  "browserMock": {
+    "tests": 3,
+    "failures": 0
+  },
+  "graphNode": {
+    "tests": 6,
+    "failures": 0
+  },
+  "build": "PASS",
+  "jar": {
+    "bytes": 33404252,
+    "sha256": "e737cb55edeee497480e62336e2d621254c0ccb001e43e0bd494f538a0a91e3f",
+    "staticFiles": 102,
+    "distIdentical": true
+  },
+  "notTested": [
+    "real model",
+    "native dialog fault injection",
+    "complete browser suite",
+    "production load performance",
+    "remote CI"
+  ]
+}

@@ -14,7 +14,7 @@ class GitHubFetcherTest {
     GitHubFetcher fetcher;
 
     @BeforeEach void setup() throws Exception {
-        temp = Files.createTempDirectory(Files.createDirectories(Path.of("target/test-temp")), "github-").toAbsolutePath();
+        temp = Files.createTempDirectory(Files.createDirectories(Path.of(System.getProperty("codeatlas.test.temp", "target/test-temp"))), "github-").toAbsolutePath();
         fetcher = new GitHubFetcher(temp.resolve("data").toString(), 20);
     }
 

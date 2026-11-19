@@ -112,7 +112,7 @@ export async function api<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const url = new URL(`/api${path}`, location.origin);
-  const projectId = activeProjectId || new URLSearchParams(location.search).get("projectId");
+  const projectId = new URLSearchParams(location.search).get("projectId") || activeProjectId;
   if (projectId && !url.searchParams.has("projectId")) url.searchParams.set("projectId", projectId);
   const response = await fetch(`${url.pathname}${url.search}`, {
     ...options,

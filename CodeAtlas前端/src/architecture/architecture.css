@@ -93,3 +93,5 @@
   .arch-side { position: static; }
   .arch-canvas { min-width: 900px; }
 }
+
+.arch-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px}.arch-tracing .arch-edge{stroke-width:3;stroke-dasharray:8 4;animation:arch-flow 1.5s linear infinite}@keyframes arch-flow{to{stroke-dashoffset:-24}}

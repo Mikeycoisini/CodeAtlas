@@ -212,8 +212,8 @@ public class EvidenceService {
     }
     public Map<String, Object> list(String query, String status, int limit, int offset) {
         page(limit, offset); String term = query.toLowerCase(Locale.ROOT);
-        var all = store.rows("SELECT id,title FROM learning_records WHERE kind='KNOWLEDGE' AND deleted_at IS NULL ORDER BY updated_at DESC,id").stream()
-                .filter(row -> row.get("title").toString().toLowerCase(Locale.ROOT).contains(term)).map(row -> knowledge((String) row.get("id")))
+        var all = store.rows("SELECT id,title,project_id FROM learning_records WHERE kind='KNOWLEDGE' AND deleted_at IS NULL ORDER BY updated_at DESC,id").stream()
+                .filter(row -> dev.codeatlas.learning.ProjectScope.matches(row.get("projectId"))).filter(row -> row.get("title").toString().toLowerCase(Locale.ROOT).contains(term)).map(row -> knowledge((String) row.get("id")))
                 .filter(row -> status.isEmpty() || status.equals(object(row.get("assessment")).get("status"))).toList();
         return Map.of("items", all.stream().skip(offset).limit(limit).toList(), "total", all.size(), "limit", limit, "offset", offset);
     }
@@ -223,9 +223,9 @@ public class EvidenceService {
         return Map.of("items", rows.stream().skip(offset).limit(limit).map(this::decodeRow).toList(), "total", rows.size(), "limit", limit, "offset", offset);
     }
     public Map<String, Object> mistakes(int limit, int offset) {
-        page(limit, offset); var rows = store.rows("SELECT * FROM training_attempts WHERE status='SUBMITTED' ORDER BY submitted_at DESC,id");
+        page(limit, offset); var rows = store.rows("SELECT a.*,t.project_id FROM training_attempts a JOIN training_tasks t ON t.id=a.task_id WHERE a.status='SUBMITTED' ORDER BY a.submitted_at DESC,a.id");
         var all = new ArrayList<Map<String, Object>>();
-        for (var attempt : rows) for (var result : items((String) attempt.get("resultsPayload"))) {
+        for (var attempt : rows.stream().filter(row -> dev.codeatlas.learning.ProjectScope.matches(row.get("projectId"))).toList()) for (var result : items((String) attempt.get("resultsPayload"))) {
             if (!Set.of("INCORRECT", "NEEDS_REVIEW").contains(result.get("verdict"))) continue;
             var item = trainingFact(attempt, (String) result.get("questionId")); item.put("id", attempt.get("id") + ":" + result.get("questionId")); all.add(item);
         }

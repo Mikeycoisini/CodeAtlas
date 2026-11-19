@@ -4,7 +4,8 @@ import { mutate, type EvidenceSource } from "./learningApi";
 
 export default function SourcePicker({ onSelect, onClose }: { onSelect: (source: EvidenceSource) => void; onClose: () => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [project, setProject] = useState("");
+  const globalProject=new URLSearchParams(location.search).get("projectId")??"";
+  const [project, setProject] = useState(globalProject);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [snapshot, setSnapshot] = useState("");
   const [query, setQuery] = useState("");
@@ -12,6 +13,7 @@ export default function SourcePicker({ onSelect, onClose }: { onSelect: (source:
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const report = (error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setError(error instanceof Error ? error.message : String(error)); };
+  useEffect(()=>{if(globalProject)setProject(globalProject);},[globalProject]);
   useEffect(() => { const controller = new AbortController(); api<Project[]>("/projects", { signal: controller.signal }).then(setProjects).catch(report); return () => controller.abort(); }, []);
   useEffect(() => {
     setSnapshots([]); setSnapshot(""); setPage(null);
@@ -40,7 +42,7 @@ export default function SourcePicker({ onSelect, onClose }: { onSelect: (source:
   return <div className="modal-backdrop"><section className="modal source-picker" role="dialog" aria-modal="true" aria-labelledby="source-title">
     <div className="modal-title"><h2 id="source-title">关联源码</h2><button onClick={onClose} disabled={busy}>关闭</button></div>
     {error && <p role="alert" className="learning-error">{error}</p>}
-    <label>来源项目<select aria-label="来源项目" value={project} onChange={e => setProject(e.target.value)}><option value="">选择项目</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <label>来源项目<select aria-label="来源项目" disabled={!!globalProject} value={project} onChange={e => setProject(e.target.value)}><option value="">选择项目</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
     <label>来源快照<select aria-label="来源快照" value={snapshot} onChange={e => setSnapshot(e.target.value)}><option value="">选择快照</option>{snapshots.map(s => <option key={s.id} value={s.id}>{s.manifestHash.slice(0, 10)} · {new Date(s.createdAt).toLocaleString("zh-CN")}</option>)}</select></label>
     <label>搜索来源方法<input aria-label="搜索来源方法" value={query} onChange={e => setQuery(e.target.value)} placeholder="方法名或签名"/></label>
     <div className="source-search-results">{page?.items.map(symbol => <button key={symbol.id} onClick={() => select(symbol)} disabled={busy}><strong>{symbol.signature}</strong><small>{symbol.qualifiedName} · L{symbol.startLine}</small></button>)}

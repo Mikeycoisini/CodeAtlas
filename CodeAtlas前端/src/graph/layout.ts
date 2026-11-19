@@ -17,12 +17,10 @@ export function layoutGraph(nodes: LayoutNode[], edges: LayoutEdge[], direction:
   const ordered = [...nodes].sort((left, right) => left.id.localeCompare(right.id, "en"));
   for (const node of ordered) {
     const width = node.width ?? nodeWidth; const height = node.height ?? nodeHeight;
-    const loops = edges.filter(edge => edge.source === node.id && edge.target === node.id).length;
-    const reach = loops ? 120 + (loops - 1) * 42 : 0;
-    graph.setNode(node.id, { width: width + (loops ? 2 * (reach + 120) : 0), height: height + (loops ? 2 * (reach + 20) : 0) });
+    graph.setNode(node.id, { width, height });
   }
   for (const edge of [...edges].sort((left, right) => left.id.localeCompare(right.id, "en"))) {
-    graph.setEdge(edge.source, edge.target, {}, edge.id);
+    if(edge.source !== edge.target) graph.setEdge(edge.source, edge.target, {}, edge.id);
   }
   dagre.layout(graph);
   return ordered.map(node => {

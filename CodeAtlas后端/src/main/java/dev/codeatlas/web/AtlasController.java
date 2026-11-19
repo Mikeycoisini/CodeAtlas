@@ -66,7 +66,7 @@ public class AtlasController {
     }
 
     @GetMapping("/snapshots/{snapshot}/symbols") public Object symbols(@PathVariable String snapshot,
-            @RequestParam(defaultValue = "") String query, @RequestParam(required = false) String kind,
+            @RequestParam(defaultValue = "") String query, @RequestParam(required = false) String kind, @RequestParam(defaultValue="") String fileId,
             @RequestParam(required = false) String generationId,
             @RequestParam(defaultValue = "100") int limit, @RequestParam(defaultValue = "0") int offset) {
         String generation = store.generation(snapshot, generationId);
@@ -74,7 +74,7 @@ public class AtlasController {
         String term = query.toLowerCase(Locale.ROOT);
         matched = matched.stream().filter(o -> {
             var symbol = (com.fasterxml.jackson.databind.JsonNode) o;
-            return (kind == null || symbol.get("kind").asText().equals(kind))
+            return (fileId.isBlank() || fileId.equals(symbol.get("fileId").asText())) && (kind == null || symbol.get("kind").asText().equals(kind))
                     && (symbol.get("name").asText().toLowerCase(Locale.ROOT).contains(term)
                     || (term.contains(".") && symbol.get("qualifiedName").asText().toLowerCase(Locale.ROOT).contains(term))
                     || symbol.get("signature").asText().toLowerCase(Locale.ROOT).contains(term));

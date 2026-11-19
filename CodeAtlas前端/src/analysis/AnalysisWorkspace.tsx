@@ -1,3 +1,5 @@
+import SourceSelector from "../learning/SourceSelector";
+import type { SourceSelection } from "../learning/learningApi";
 import { useEffect, useMemo, useState } from "react";
 import { api, type Symbol } from "../api";
 import type { EvidenceSource } from "../learning/learningApi";
@@ -14,6 +16,7 @@ import {
 import "./analysis.css";
 
 type Tab = "flow" | "sequence" | "uml";
+const isType = (symbol: Symbol | null) => !!symbol && ["CLASS","INTERFACE","ENUM","RECORD","ANNOTATION"].includes(symbol.kind);
 
 function sourceEvidence(projectId: string, snapshotId: string, generationId: string, source: AnalysisSource): EvidenceSource {
   return {
@@ -128,11 +131,11 @@ function UmlView({ projectId, page, onSource }: { projectId: string; page: UmlPa
   </div>;
 }
 
-export default function AnalysisWorkspace({ projectId, snapshotId, generationId, selectedSymbol, onSource, theme }: {
+export default function AnalysisWorkspace({ projectId, snapshotId, generationId, selectedSymbol, onSource, onSelect, theme }: {
   projectId: string; snapshotId: string; generationId: string; selectedSymbol: Symbol | null;
-  onSource: (source: EvidenceSource) => void; theme: "light" | "dark";
+  onSelect: (source: SourceSelection, symbol: Symbol | null) => void; onSource: (source: EvidenceSource) => void; theme: "light" | "dark";
 }) {
-  const [tab, setTab] = useState<Tab>(selectedSymbol?.kind === "CLASS" || selectedSymbol?.kind === "INTERFACE" ? "uml" : "flow");
+  const [tab, setTab] = useState<Tab>(isType(selectedSymbol) ? "uml" : "flow");
   const [flow, setFlow] = useState<FlowPage | null>(null);
   const [sequence, setSequence] = useState<SequencePage | null>(null);
   const [uml, setUml] = useState<UmlPage | null>(null);
@@ -140,7 +143,7 @@ export default function AnalysisWorkspace({ projectId, snapshotId, generationId,
   useEffect(() => { setFlow(null); setSequence(null); setUml(null); setError(""); }, [selectedSymbol?.id, generationId, tab]);
   useEffect(() => {
     if (!selectedSymbol) return;
-    setTab(selectedSymbol.kind === "CLASS" || selectedSymbol.kind === "INTERFACE" ? "uml" : "flow");
+    setTab(isType(selectedSymbol) ? "uml" : "flow");
   }, [selectedSymbol?.id]);
   useEffect(() => {
     if (!snapshotId || !selectedSymbol) return;
@@ -152,18 +155,19 @@ export default function AnalysisWorkspace({ projectId, snapshotId, generationId,
     } else if (tab === "sequence" && callable) {
       api<SequencePage>(`/snapshots/${snapshotId}/symbols/${selectedSymbol.id}/sequence?generationId=${generationId}&depth=3&limit=120`, { signal: controller.signal })
         .then(setSequence).catch(reason => { if (!controller.signal.aborted) setError(String(reason.message)); });
-    } else if (tab === "uml" && (selectedSymbol.kind === "CLASS" || selectedSymbol.kind === "INTERFACE")) {
+    } else if (tab === "uml" && (isType(selectedSymbol))) {
       api<UmlPage>(`/snapshots/${snapshotId}/symbols/${selectedSymbol.id}/uml?generationId=${generationId}`, { signal: controller.signal })
         .then(setUml).catch(reason => { if (!controller.signal.aborted) setError(String(reason.message)); });
     }
     return () => controller.abort();
   }, [snapshotId, generationId, selectedSymbol?.id, selectedSymbol?.kind, tab]);
-  if (!snapshotId) return <main className={`analysis-workspace analysis-${theme}`}><h1>代码分析</h1><p>选择项目和源码快照后查看。</p></main>;
-  if (!selectedSymbol) return <main className={`analysis-workspace analysis-${theme}`}><div className="analysis-header"><div><p className="analysis-eyebrow">CODE ANALYSIS</p><h1>代码分析</h1><p className="analysis-muted">在项目探索中选择一个方法查看流程图／时序图，或选择一个类型查看完整 UML。</p></div></div></main>;
+  const chooser=<SourceSelector snapshotId={snapshotId} generationId={generationId} onSelect={onSelect}/>;
+  if (!snapshotId) return <main className={`analysis-workspace analysis-${theme}`}><h1>代码分析</h1>{chooser}<p>选择项目和源码快照后查看。</p></main>;
+  if (!selectedSymbol) return <main className={`analysis-workspace analysis-${theme}`}><div className="analysis-header"><div><p className="analysis-eyebrow">CODE ANALYSIS</p><h1>代码分析</h1>{chooser}<p className="analysis-muted">在项目探索中选择一个方法查看流程图／时序图，或选择一个类型查看完整 UML。</p></div></div></main>;
   const callable = selectedSymbol.kind === "METHOD" || selectedSymbol.kind === "CONSTRUCTOR";
-  const type = selectedSymbol.kind === "CLASS" || selectedSymbol.kind === "INTERFACE";
+  const type = isType(selectedSymbol);
   return <main className={`analysis-workspace analysis-${theme}`}>
-    <div className="analysis-header">
+    {chooser}<div className="analysis-header">
       <div><p className="analysis-eyebrow">CODE ANALYSIS</p><h1>{selectedSymbol.name}</h1><p className="analysis-muted">{selectedSymbol.signature} · {selectedSymbol.qualifiedName}</p></div>
       <div className="analysis-tabs">
         <button disabled={!callable} className={tab === "flow" ? "active" : ""} onClick={() => setTab("flow")}>流程图</button>

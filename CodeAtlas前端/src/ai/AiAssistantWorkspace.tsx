@@ -1,3 +1,5 @@
+import SourceSelector from "../learning/SourceSelector";
+import type { Symbol } from "../api";
 import { useEffect, useState } from "react";
 import { allFiles, api, type Page } from "../api";
 import type { SourceSelection } from "../learning/learningApi";
@@ -14,8 +16,8 @@ type Metrics = { tasks: number; published: number; attempts: number; submitted: 
   guideProgress: number; knowledge: number; mastered: number; dueCards: number };
 const emptyPage = <T,>(): Page<T> => ({ items: [], total: 0, generationId: "", limit: 200, offset: 0 } as Page<T>);
 
-export default function AiAssistantWorkspace({ snapshotId, currentSource, sourceLabel, onOpenAi, onNavigate, onOpenLibrary, theme }: {
-  snapshotId: string; currentSource?: SourceSelection; sourceLabel: string;
+export default function AiAssistantWorkspace({ snapshotId, generationId, onSelect, currentSource, sourceLabel, onOpenAi, onNavigate, onOpenLibrary, theme }: {
+  snapshotId: string; generationId: string; onSelect: (source: SourceSelection, symbol: Symbol | null) => void; currentSource?: SourceSelection; sourceLabel: string;
   onOpenAi: (purpose?: string, selection?: SourceSelection, autoPrepare?: boolean) => void;
   onNavigate: (view: "training" | "guides") => void; onOpenLibrary: (kind: "knowledge" | "cards") => void; theme: "light" | "dark";
 }) {
@@ -44,7 +46,7 @@ export default function AiAssistantWorkspace({ snapshotId, currentSource, source
     const controller = new AbortController();
     void loadStatus(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [snapshotId]);
   useEffect(() => {
     const controller = new AbortController();
     const read = async <T,>(task: Promise<T>, fallback: T): Promise<T> => {
@@ -76,7 +78,7 @@ export default function AiAssistantWorkspace({ snapshotId, currentSource, source
       });
     });
     return () => controller.abort();
-  }, []);
+  }, [snapshotId]);
   const selection = currentSource;
   const ready = !!status?.reachable && status.configured;
   const statsFor = (id: string) => {
@@ -174,8 +176,8 @@ export default function AiAssistantWorkspace({ snapshotId, currentSource, source
     {status?.reachable && <section className="ai-provider" aria-label="AI 服务信息"><span>提供方 <strong>{status.provider}</strong></span><span>模型 <strong>{status.model}</strong></span><span>服务地址 <strong>{status.baseUrl}</strong></span>{status.maxTokens && <span>输出上限 <strong>{status.maxTokens}</strong></span>}</section>}
     <div className="ai-workspace-grid">
       <aside className="ai-source-rail">
-        <section className="ai-source-picker" aria-label="当前源码来源">
-          <div className="ai-source-heading"><div><p className="ai-step">01 · SOURCE</p><h2>当前源码来源</h2><p className="ai-muted">源码由“代码分析”标签统一选择，此处只读展示。</p></div>
+        <section className="ai-source-picker" aria-label="当前源码来源"><SourceSelector snapshotId={snapshotId} generationId={generationId} onSelect={onSelect}/>
+          <div className="ai-source-heading"><div><p className="ai-step">01 · SOURCE</p><h2>当前源码来源</h2><p className="ai-muted">选择已导入快照中的文件或符号，供解释与学习草稿共用。</p></div>
             <span className={`ai-source-state ${selection ? "fixed" : "empty"}`}>{selection ? "已固定" : "未选择"}</span></div>
           {notice && <p role="status" className="ai-notice">{notice}</p>}
           {!snapshotId && <p className="ai-muted">请先在顶部选择项目和源码快照。</p>}

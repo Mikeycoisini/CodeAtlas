@@ -114,7 +114,13 @@ class TrainingQuestion(BaseModel):
         else:
             raw["options"] = []
             if fmt == "TRUE_FALSE" and isinstance(raw.get("correctAnswer"), str):
-                raw["correctAnswer"] = raw["correctAnswer"].strip().lower() in {"true", "yes", "1", "对", "正确"}
+                value = raw["correctAnswer"].strip().lower()
+                if value in {"true", "yes", "1", "对", "正确"}:
+                    raw["correctAnswer"] = True
+                elif value in {"false", "no", "0", "错", "错误"}:
+                    raw["correctAnswer"] = False
+                else:
+                    raise ValueError("Unrecognized boolean answer")
         if raw.get("hints") is None:
             raw["hints"] = []
         return raw
@@ -143,8 +149,8 @@ class KnowledgePoint(BaseModel):
     code: str = ""
     analysis: str = ""
     sourceId: str = ""
-    startLine: int = 1
-    endLine: int = 1
+    startLine: int = 0
+    endLine: int = 0
 
     @model_validator(mode="before")
     @classmethod
@@ -166,9 +172,9 @@ class KnowledgePoint(BaseModel):
         raw["sourceId"] = str(raw.get("sourceId") or raw.get("source_id") or "").strip()[:100]
         for key in ("startLine", "endLine"):
             try:
-                raw[key] = max(1, int(raw.get(key) or 1))
+                raw[key] = max(0, int(raw.get(key) or 0))
             except (TypeError, ValueError):
-                raw[key] = 1
+                raw[key] = 0
         if raw["endLine"] < raw["startLine"]:
             raw["endLine"] = raw["startLine"]
         return raw

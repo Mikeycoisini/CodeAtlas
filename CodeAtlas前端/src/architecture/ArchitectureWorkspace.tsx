@@ -102,6 +102,8 @@ export default function ArchitectureWorkspace({ snapshotId, generationId, refres
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
+  const [zoom,setZoom]=useState(1);
+  const [trace,setTrace]=useState(false);
   const [selectedNode, setSelectedNode] = useState<ArchitectureNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<ArchitectureEdge | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -182,8 +184,9 @@ export default function ArchitectureWorkspace({ snapshotId, generationId, refres
         {page.truncated && <p className="arch-warning">结果已截断：还有 {page.omittedEdgeCount} 条关系或更多节点未展示，可缩小视角或提高上限。</p>}
         {!page.generationId && <p className="arch-warning">该快照尚无已发布索引。</p>}
       </section>
+      <div className="arch-controls"><button onClick={()=>setZoom(v=>Math.max(.6,v-.1))}>缩小</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(v=>Math.min(1.6,v+.1))}>放大</button><button onClick={()=>setZoom(1)}>重置比例</button><button aria-pressed={trace} onClick={()=>setTrace(v=>!v)}>演示静态关系</button><small>项目内部 · 静态结构分组</small></div>
       <div className="arch-layout">
-        <section className="arch-canvas" style={{ width: canvas!.width, height: canvas!.height }}>
+        <section className={`arch-canvas ${trace ? "arch-tracing" : ""}`} style={{ width: canvas!.width, height: canvas!.height, zoom }}>
           {canvas!.groups.map(group => visibleIds.has(group.id) || page.nodes.some(node => node.parentId === group.id && visibleIds.has(node.id)) ?
             <div className="arch-group" key={group.id} style={{ left: group.x, top: group.y, width: group.w, height: group.h }}><span>{group.name}</span></div> : null)}
           <svg className="arch-edges" width={canvas!.width} height={canvas!.height} aria-hidden="true">
@@ -192,7 +195,7 @@ export default function ArchitectureWorkspace({ snapshotId, generationId, refres
               if (!source || !target || !visibleIds.has(edge.source) || !visibleIds.has(edge.target)) return null;
               const sx = source.x + source.w, sy = source.y + source.h / 2;
               const tx = target.x, ty = target.y + target.h / 2;
-              return <path key={edge.id} className={`arch-edge ${edge.status.toLowerCase()}`} d={`M ${sx} ${sy} C ${sx + 70} ${sy} ${tx - 70} ${ty} ${tx} ${ty}`}
+              return <path key={edge.id} className={`arch-edge ${edge.status.toLowerCase()}`} d={`M ${sx} ${sy} L ${(sx+tx)/2} ${sy} L ${(sx+tx)/2} ${ty} L ${tx} ${ty}`}
                 onClick={() => { setSelectedNode(null); setSelectedEdge(edge); }}><title>{edge.kind} · {architectureStatuses[edge.status] ?? edge.status}</title></path>;
             })}
           </svg>

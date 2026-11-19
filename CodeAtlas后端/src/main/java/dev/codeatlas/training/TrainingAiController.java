@@ -12,13 +12,14 @@ import static dev.codeatlas.training.TrainingDefinition.*;
 @RestController
 @RequestMapping("/api/training")
 public class TrainingAiController {
+    private final LearningService learning;
     private final TrainingService training;
     private final TrainingDefinition definitions;
     private final AiContextService contexts;
     private final AtlasStore store;
     private final SourceEvidenceService json;
-    public TrainingAiController(TrainingService training, TrainingDefinition definitions, AiContextService contexts, AtlasStore store, SourceEvidenceService json) {
-        this.training = training; this.definitions = definitions; this.contexts = contexts; this.store = store; this.json = json;
+    public TrainingAiController(TrainingService training, TrainingDefinition definitions, AiContextService contexts, AtlasStore store, SourceEvidenceService json, LearningService learning) {
+        this.training = training; this.definitions = definitions; this.contexts = contexts; this.store = store; this.json = json; this.learning=learning;
     }
     @PostMapping("/ai/contexts") public Object questions(@RequestBody Map<String, Object> input) {
         fields(input, "sourceIds", "goal", "questionCount", "formats", "depth");
@@ -54,6 +55,48 @@ public class TrainingAiController {
         body.put("tags", List.of("AI"));
         body.put("idempotencyKey", key);
         return training.createTask(body);
+    }
+    @PostMapping("/ai/generations/{id}/learning-pack")
+    public Object adoptPack(@PathVariable String id,@RequestBody Map<String,Object> input) {
+        fields(input,"idempotencyKey"); text(input,"idempotencyKey",100,true);
+        return store.transaction(() -> {
+            // This durable lock serializes all retries, even with a different browser key.
+            var generation=store.one("SELECT * FROM ai_generations WHERE id=? AND status='SUCCEEDED' FOR UPDATE",id);
+            var context=json.decode((String)store.one("SELECT context_json FROM ai_contexts WHERE id=?",generation.get("contextId")).get("contextJson"));
+            if(!"TRAINING_QUESTIONS".equals(context.get("operation"))) throw invalid("该生成记录不是出题结果");
+            var sourceIds=((List<?>)context.get("sources")).stream().map(x->map(x).get("sourceId")).toList();
+            dev.codeatlas.learning.ProjectScope.owner(store,sourceIds,null);
+            var previous=store.rows("SELECT payload FROM learning_pack_adoptions WHERE generation_id=?",id);
+            if(!previous.isEmpty()) return json.decode((String)previous.getFirst().get("payload"));
+            var result=json.decode((String)generation.get("resultJson"));
+            var points=result.get("knowledge") instanceof List<?> list && !list.isEmpty()?list:List.of(Map.of("title",result.get("title"),"body",result.get("goal"),"analysis",result.get("acceptanceCriteria")));
+            var knowledgeIds=new ArrayList<String>(); var cardIds=new ArrayList<String>();
+            int index=0;
+            for(Object raw:points) {
+                var point=map(raw); String suffix=id+":"+index++;
+                String title=String.valueOf(point.getOrDefault("title",result.get("title")));
+                String body=String.valueOf(point.getOrDefault("body",result.get("goal")));
+                if(body.isBlank()) body=title;
+                String code=String.valueOf(point.getOrDefault("code",""));
+                // Never use model-authored text as original source, including old generations.
+                String source=String.valueOf(point.getOrDefault("sourceId",sourceIds.getFirst()));
+                if(!sourceIds.contains(source)) source=(String)sourceIds.getFirst();
+                var evidence=json.get(source);
+                code=(String)evidence.get("content");
+                if(code.length()>16000) code=code.substring(0,16000);
+                String analysis=String.valueOf(point.getOrDefault("analysis",""));
+                var knowledge=learning.create("KNOWLEDGE",Map.of("title",title,"body",body,"type","AI_PROJECT","generationId",id,"sourceIds",List.of(source),"tags",List.of("AI"),"idempotencyKey","pack-knowledge:"+suffix));
+                knowledgeIds.add((String)knowledge.get("id"));
+                var card=new LinkedHashMap<String,Object>();
+                card.put("question","请结合源码说明："+title);card.put("answer",body);card.put("explanation",analysis);card.put("codeExample",code);
+                card.put("knowledgeId",knowledge.get("id"));card.put("generationId",id);card.put("sourceIds",List.of(source));card.put("tags",List.of("AI"));card.put("idempotencyKey","pack-card:"+suffix);
+                cardIds.add((String)learning.create("CARD",card).get("id"));
+            }
+            var task=map(createTask(id,Map.of("idempotencyKey","pack-task:"+id)));
+            var saved=Map.<String,Object>of("trainingId",task.get("id"),"knowledge",knowledgeIds.size(),"cards",cardIds.size(),"knowledgeIds",knowledgeIds,"cardIds",cardIds);
+            store.update("INSERT INTO learning_pack_adoptions(generation_id,payload,created_at) VALUES(?,?,?)",id,store.encode(saved),AtlasStore.now());
+            return saved;
+        });
     }
     @PostMapping("/attempts/{id}/questions/{questionId}/ai-context") public Object feedback(@PathVariable String id, @PathVariable String questionId, @RequestBody Map<String, Object> input) {
         fields(input, "question", "sourceIds", "depth");

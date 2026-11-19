@@ -66,12 +66,26 @@ public class GuideService {
         if (old != null) for (String field : List.of("suggestionGenerationId", "suggestionSummary")) if (old.containsKey(field)) result.put(field, old.get(field));
         return result;
     }
+    private String guideOwner(Map<String,Object> payload) {
+        var owners=new HashSet<Object>();
+        String requested=dev.codeatlas.learning.ProjectScope.current();
+        if(!requested.isEmpty()){store.one("SELECT id FROM projects WHERE id=?",requested);owners.add(requested);}
+        for(Object id:(List<?>)payload.get("sourceIds")) owners.add(store.one("SELECT project_id FROM evidence_sources WHERE id=?",id).get("projectId"));
+        for(Object id:(List<?>)payload.get("knowledgeIds")) {
+            Object owner=store.one("SELECT project_id FROM learning_records WHERE id=?",id).get("projectId");
+            if(owner!=null) owners.add(owner);
+            else for(var source:store.rows("SELECT e.project_id FROM learning_sources l JOIN evidence_sources e ON e.id=l.source_id WHERE l.record_id=?",id))owners.add(source.get("projectId"));
+        }
+        owners.remove(null);
+        if(owners.size()>1 && !requested.isEmpty())throw new ApiException(400,"PROJECT_SOURCE_MISMATCH","引导来源不属于当前项目");
+        return owners.size()==1?(String)owners.iterator().next():null;
+    }
     public Map<String, Object> create(Map<String, Object> input) {
         fields(input, "title", "goal", "sourceIds", "knowledgeIds", "idempotencyKey");
-        var body = new LinkedHashMap<>(input); body.remove("idempotencyKey");
+        var body = new LinkedHashMap<>(input); body.remove("idempotencyKey"); if(!dev.codeatlas.learning.ProjectScope.current().isEmpty()) body.put("projectId",dev.codeatlas.learning.ProjectScope.current());
         return mutations.once(text(input, "idempotencyKey", 100, true), "GUIDE_CREATE", body, () -> {
-            var normalized = normalize(input, null); String id = AtlasStore.uuid(); long now = clock.millis();
-            store.update("INSERT INTO guide_runs(id,title,status,revision,payload,created_at_ms,updated_at_ms) VALUES(?,?,'ACTIVE',1,?,?,?)", id, normalized.get("title"), store.encode(normalized), now, now);
+            var normalized = normalize(input, null); String owner=guideOwner(normalized); String id = AtlasStore.uuid(); long now = clock.millis();
+            store.update("INSERT INTO guide_runs(id,title,status,revision,payload,created_at_ms,updated_at_ms,project_id) VALUES(?,?,'ACTIVE',1,?,?,?,?)", id, normalized.get("title"), store.encode(normalized), now, now, owner);
             var guide = get(id); event(id, 1, "CREATE", Map.of(), guide); return guide;
         });
     }
@@ -81,6 +95,7 @@ public class GuideService {
             var row = raw(id, true); revision(row, input);
             if (row.get("status").equals("COMPLETED")) throw new ApiException(409, "GUIDE_COMPLETED", "请先重新打开已结束的引导");
             var before = view(row); var normalized = normalize(input, before);
+            dev.codeatlas.learning.ProjectScope.unchanged(row.get("projectId"),guideOwner(normalized));
             return write(row, normalized, (String) row.get("status"), "EDIT", before);
         });
     }
@@ -136,10 +151,23 @@ public class GuideService {
     private void event(String id, int revision, String kind, Map<String, Object> before, Map<String, Object> after) {
         store.update("INSERT INTO guide_events(id,guide_id,revision,kind,payload,created_at_ms) VALUES(?,?,?,?,?,?)", AtlasStore.uuid(), id, revision, kind, store.encode(Map.of("before", before, "after", after)), clock.millis());
     }
+    private boolean matchesProject(Map<String,Object> row) {
+        String project=dev.codeatlas.learning.ProjectScope.current();
+        if(project.isEmpty()) return true;
+        if(row.get("projectId")!=null) return project.equals(row.get("projectId"));
+        var payload=json.decode((String)row.get("payload"));
+        var owners=new HashSet<Object>();
+        for(Object raw:(List<?>)payload.getOrDefault("sources",List.of())) owners.add(object(raw).get("projectId"));
+        for(Object id:(List<?>)payload.getOrDefault("knowledgeIds",List.of())) {
+            var linked=store.rows("SELECT project_id FROM learning_records WHERE id=?",id);
+            if(!linked.isEmpty()) owners.add(linked.getFirst().get("projectId"));
+        }
+        owners.remove(null);return owners.size()==1 && owners.contains(project);
+    }
     public Map<String, Object> list(String query, String status, int limit, int offset) {
         page(limit, offset); if (!status.isEmpty() && !Set.of("ACTIVE", "PAUSED", "EXITED", "COMPLETED").contains(status)) throw new ApiException(400, "INVALID_STATE", "引导状态无效");
         String term = query.toLowerCase(Locale.ROOT);
-        var rows = store.rows("SELECT * FROM guide_runs ORDER BY updated_at_ms DESC,id").stream().filter(row -> (status.isEmpty() || status.equals(row.get("status"))) && (row.get("title") + " " + row.get("payload")).toLowerCase(Locale.ROOT).contains(term)).toList();
+        var rows = store.rows("SELECT * FROM guide_runs ORDER BY updated_at_ms DESC,id").stream().filter(row -> matchesProject(row)).filter(row -> (status.isEmpty() || status.equals(row.get("status"))) && (row.get("title") + " " + row.get("payload")).toLowerCase(Locale.ROOT).contains(term)).toList();
         return Map.of("items", rows.stream().skip(offset).limit(limit).map(this::view).toList(), "total", rows.size(), "limit", limit, "offset", offset);
     }
     public Map<String, Object> history(String id, int limit, int offset) {

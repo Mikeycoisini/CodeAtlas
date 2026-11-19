@@ -290,4 +290,15 @@ class TrainingIntegrationTest {
             assertThat(((Map<?, ?>) attempt.get("task")).get("title")).isEqualTo("New committed version");
         } finally { release.countDown(); }
     }
+    @Test void projectScopeReachesHttpTaskListsAndRejectsForeignSources() throws Exception {
+        var a=source(); var b=source();
+        String pa=a.get("projectId").asText(), pb=b.get("projectId").asText();
+        var ta=ok(HttpMethod.POST,"/training/tasks?projectId="+pa,definition(a,List.of(question("TRUE_FALSE"))));
+        ok(HttpMethod.POST,"/training/tasks?projectId="+pb,definition(b,List.of(question("TRUE_FALSE"))));
+        var page=ok(HttpMethod.GET,"/training/tasks?projectId="+pa,null);
+        assertThat(page.get("total").asInt()).isEqualTo(1);
+        assertThat(call(HttpMethod.GET,"/training/tasks/"+ta.get("id").asText()+"?projectId="+pb,null).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(page.get("items").get(0).get("id")).isEqualTo(ta.get("id"));
+        assertThat(call(HttpMethod.POST,"/training/tasks?projectId="+pa,definition(b,List.of(question("TRUE_FALSE")))).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }

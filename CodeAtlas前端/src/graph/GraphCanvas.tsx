@@ -31,7 +31,9 @@ export default function GraphCanvas({ page, identity, theme, direction, center, 
   const instance = useRef<ReactFlowInstance | null>(null);
   const [readyInstance, setReadyInstance] = useState<ReactFlowInstance | null>(null);
   const saved = useRef<SavedView | null>(null); const current = useRef(identity); current.current = identity;
-  const key = `codeatlas-graph-${identity}-${direction}`;
+  const shape=JSON.stringify([page.nodes.map(n=>[n.id,n.label]),page.edges.map(e=>[e.id,e.source,e.target])]);
+  let digest=2166136261;for(let i=0;i<shape.length;i++)digest=Math.imul(digest^shape.charCodeAt(i),16777619);
+  const key = `codeatlas-graph-v2-${identity}-${direction}-${digest>>>0}`;
   useEffect(() => {
     let active = true; setLoading(true); setError(""); setNodes([]); saved.current = null;
     try {

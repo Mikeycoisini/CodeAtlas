@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { statusText } from "../api";
-import { mutate, type LearningRecord, type PreparedContext, type Provider, type SourceSelection } from "../learning/learningApi";
+import { mutate, type PreparedContext, type Provider, type SourceSelection } from "../learning/learningApi";
 import AiConsentPreview from "../learning/AiConsentPreview";
 import { get, type Guide, type GuideAdvice } from "../study/studyApi";
 import type { Candidate } from "../training/trainingApi";
@@ -29,22 +29,15 @@ export default function LearningPackPanel({ kind, selection, selections, goal, q
   const started = useRef(false);
   const generationKey = useRef(crypto.randomUUID());
   const applyKey = useRef(crypto.randomUUID());
-  const knowledgeKeys = useRef<string[]>([]);
-  const cardKeys = useRef<string[]>([]);
-  const resetKeys = () => {
-    knowledgeKeys.current = Array.from({ length: 8 }, () => crypto.randomUUID());
-    cardKeys.current = Array.from({ length: 8 }, () => crypto.randomUUID());
-  };
   const report = (reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason));
 
   useEffect(() => {
     get<Provider>("/ai/provider").then(setProvider).catch(report);
   }, []);
   const prepare = async () => {
-    setBusy(true); setError(""); setAgreed(false); setNotice(""); setApplied(null);
+    setBusy(true); setError(""); setAgreed(false); setNotice(""); setApplied(null); setContext(null); setGeneration(null);
     generationKey.current = crypto.randomUUID();
     applyKey.current = crypto.randomUUID();
-    resetKeys();
     try {
       const sources = await Promise.all(chosen.map(item => mutate<{ id: string }>("/sources", item)));
       const sourceIds = sources.map(item => item.id);
@@ -115,48 +108,8 @@ export default function LearningPackPanel({ kind, selection, selections, goal, q
     setBusy(true); setError("");
     try {
       if (kind === "training") {
-        const candidate = generation.result as Candidate;
-        const sourceIds = context?.sources.map(item => item.sourceId ?? item.id) ?? [];
-        const first = context?.sources[0];
-        const points = candidate.knowledge?.length ? candidate.knowledge : [{
-          title: candidate.title,
-          body: candidate.goal,
-          code: first?.content?.slice(0, 4_000) ?? "",
-          analysis: candidate.acceptanceCriteria,
-          sourceId: first?.sourceId ?? first?.id ?? "",
-          filePath: first?.filePath,
-          startLine: first?.startLine,
-          endLine: first?.endLine,
-        }];
-        for (let index = 0; index < points.length; index++) {
-          const point = points[index];
-          const pointer = point.filePath && point.startLine
-            ? `${point.filePath} · L${point.startLine}–L${point.endLine ?? point.startLine}` : "";
-          const body = [point.body, point.analysis ? `代码解析\n${point.analysis}` : "",
-            point.code ? `源码片段\n${point.code}` : "", pointer].filter(Boolean).join("\n\n");
-          const pointSources = Array.from(new Set([...sourceIds, ...(point.sourceId ? [point.sourceId] : [])]));
-          const knowledge = await mutate<LearningRecord>("/knowledge", {
-            title: (point.title || `项目知识点 ${index + 1}`).slice(0, 200),
-            body: body.slice(0, 32_000),
-            type: "AI_PROJECT",
-            tags: ["AI", "项目八股文"],
-            sourceIds: pointSources,
-            idempotencyKey: knowledgeKeys.current[index] ?? crypto.randomUUID(),
-          });
-          await mutate<LearningRecord>("/cards", {
-            question: `请讲清「${(point.title || "项目知识点").slice(0, 80)}」的核心原理、适用边界，并结合源码说明。`.slice(0, 500),
-            answer: (point.body || point.title).slice(0, 16_000),
-            explanation: (point.analysis || "").slice(0, 16_000),
-            codeExample: (point.code || "").slice(0, 16_000),
-            notes: pointer.slice(0, 16_000),
-            knowledgeId: knowledge.id,
-            tags: ["AI", "项目八股文"],
-            sourceIds: pointSources,
-            idempotencyKey: cardKeys.current[index] ?? crypto.randomUUID(),
-          });
-        }
-        const task = await mutate<{ id: string }>(`/training/ai/generations/${generation.id}/task`, { idempotencyKey: applyKey.current });
-        setApplied({ trainingId: task.id, knowledge: points.length, cards: points.length });
+        const saved = await mutate<{ trainingId: string; knowledge: number; cards: number }>(`/training/ai/generations/${generation.id}/learning-pack`, { idempotencyKey: applyKey.current });
+        setApplied(saved);
       } else {
         await mutate(`/guides/${guideId}/apply-suggestion`, {
           revision: guideRevision, generationId: generation.id, idempotencyKey: applyKey.current,

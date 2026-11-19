@@ -16,13 +16,13 @@ export function edgeGeometry({ sourceX, sourceY, targetX, targetY, self, fan, ho
       labelY += loopRank * 32;
     }
   } else if (horizontal) {
-    const reach = Math.max(65, Math.abs(targetX - sourceX) / 2);
-    path = `M ${sourceX} ${sourceY} C ${sourceX + reach} ${sourceY + fan} ${targetX - reach} ${targetY + fan} ${targetX} ${targetY}`;
-    labelY += fan * 0.75;
+    const mid=(sourceX+targetX)/2+fan;
+    path=`M ${sourceX} ${sourceY} L ${mid} ${sourceY} L ${mid} ${targetY} L ${targetX} ${targetY}`;
+    labelX=mid;
   } else {
-    const reach = Math.max(65, Math.abs(targetY - sourceY) / 2);
-    path = `M ${sourceX} ${sourceY} C ${sourceX + fan} ${sourceY + reach} ${targetX + fan} ${targetY - reach} ${targetX} ${targetY}`;
-    labelX += fan * 0.75;
+    const mid=(sourceY+targetY)/2+fan;
+    path=`M ${sourceX} ${sourceY} L ${sourceX} ${mid} L ${targetX} ${mid} L ${targetX} ${targetY}`;
+    labelY=mid;
   }
   return { path, labelX, labelY };
 }

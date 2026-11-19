@@ -122,6 +122,12 @@ class AiIntegrationTest {
                                 "suggestedVerdict", "PARTIAL", "citations", List.of(citation), "uncertainties", List.of("User-provided report")));
                     }
                 }
+                if(mode.equals("KNOWLEDGE") && context.path("operation").asText().equals("TRAINING_QUESTIONS")) {
+                    var envelope=(Map<?,?>)result;
+                    var content=new LinkedHashMap<String,Object>((Map<String,Object>)envelope.get("result"));
+                    content.put("knowledge",List.of(Map.of("title","Point","body","Read the source","code","INVENTED CODE","analysis","Explain source","sourceId",source.get("sourceId").asText(),"startLine",source.get("startLine").asInt(),"endLine",source.get("endLine").asInt())));
+                    result=Map.of("result",content);
+                }
                 byte[] bytes = JSON.writeValueAsBytes(result);
                 try { exchange.getResponseHeaders().set("Content-Type", "application/json"); exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes); }
                 finally { exchange.close(); }
@@ -350,5 +356,37 @@ class AiIntegrationTest {
         Thread.sleep(100);
         assertThat(calls.get()).isEqualTo(1);
         assertThat(ok(HttpMethod.GET, "/api/ai/generations/" + first.get("id").asText(), null).get("result").isNull()).isTrue();
+    }
+    @Test void learningPackAdoptionIsAtomicPersistentAndKeepsGenerationIdentity() throws Exception {
+        var original=context(); String source=original.get("sources").get(0).get("sourceId").asText();
+        var preview=ok(HttpMethod.POST,"/api/training/ai/contexts",Map.of("sourceIds",List.of(source),"goal","Read code","questionCount",1,"formats",List.of("TRUE_FALSE")));
+        var started=generate(consent(preview,"ALLOW"));
+        var done=waitFor("/api/ai/generations/"+started.get("id").asText());
+        String path="/api/training/ai/generations/"+done.get("id").asText()+"/learning-pack";
+        var adopted=ok(HttpMethod.POST,path,Map.of("idempotencyKey",UUID.randomUUID().toString()));
+        assertThat(ok(HttpMethod.POST,path,Map.of("idempotencyKey",UUID.randomUUID().toString()))).isEqualTo(adopted);
+        assertThat(adopted.get("knowledge").asInt()).isGreaterThan(0);
+        assertThat(adopted.get("cards").asInt()).isEqualTo(adopted.get("knowledge").asInt());
+        var card=ok(HttpMethod.GET,"/api/cards/"+adopted.get("cardIds").get(0).asText(),null);
+        assertThat(card.get("generationId")).isEqualTo(done.get("id"));
+        assertThat(card.get("codeExample").asText()).contains("run");
+    }
+    @Test void learningPackFailureRollsBackEveryArtifact() throws Exception {
+        var original=context();String source=original.get("sources").get(0).get("sourceId").asText();
+        var preview=ok(HttpMethod.POST,"/api/training/ai/contexts",Map.of("sourceIds",List.of(source),"goal","Read code","questionCount",1,"formats",List.of("TRUE_FALSE")));
+        mode="FORGED";
+        var started=generate(consent(preview,"ALLOW"));var done=waitFor("/api/ai/generations/"+started.get("id").asText());
+        int before=store.rows("SELECT id FROM learning_records").size();
+        var response=call(HttpMethod.POST,"/api/training/ai/generations/"+done.get("id").asText()+"/learning-pack",Map.of("idempotencyKey",UUID.randomUUID().toString()));
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(store.rows("SELECT id FROM learning_records")).hasSize(before);
+        assertThat(store.rows("SELECT generation_id FROM learning_pack_adoptions WHERE generation_id=?",done.get("id").asText())).isEmpty();
+    }
+    @Test void knowledgeCodeIsExtractedFromSnapshotRatherThanModelText() throws Exception {
+        var original=context();String source=original.get("sources").get(0).get("sourceId").asText();
+        var preview=ok(HttpMethod.POST,"/api/training/ai/contexts",Map.of("sourceIds",List.of(source),"goal","Read code","questionCount",1,"formats",List.of("TRUE_FALSE")));
+        mode="KNOWLEDGE";var started=generate(consent(preview,"ALLOW"));var done=waitFor("/api/ai/generations/"+started.get("id").asText());
+        assertThat(done.get("status").asText()).isEqualTo("SUCCEEDED");
+        assertThat(done.get("result").get("knowledge").get(0).get("code").asText()).contains("run").doesNotContain("INVENTED");
     }
 }

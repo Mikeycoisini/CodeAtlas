@@ -48,6 +48,7 @@ public class SourceEvidenceService {
     public Map<String, Object> create(Map<String, Object> input) {
         String snapshotId = required(input, "snapshotId");
         var snapshot = store.snapshot(snapshotId);
+        if(!ProjectScope.matches(snapshot.get("projectId"))) throw new ApiException(400,"PROJECT_SOURCE_MISMATCH","源码不属于当前项目");
         String generationId = optional(input, "generationId");
         String symbolId = optional(input, "symbolId");
         String fileId = optional(input, "fileId");

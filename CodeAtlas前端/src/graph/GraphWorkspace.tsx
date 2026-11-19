@@ -59,7 +59,7 @@ export default function GraphWorkspace({ projectId, snapshotId, generationId, re
   const view = (params.get("graphView") ?? "PACKAGE") as GraphView;
   const focus = params.get("graphFocus") ?? ""; const packageId = params.get("graphPackage") ?? "";
   const query = params.get("graphQuery") ?? ""; const offset = Number(params.get("graphOffset") ?? "0");
-  const limit = Number(params.get("graphLimit") ?? "80"); const edgeLimit = Number(params.get("graphEdgeLimit") ?? "300");
+  const limit = Number(params.get("graphLimit") ?? "40"); const edgeLimit = Number(params.get("graphEdgeLimit") ?? "300");
   const statuses = params.get("graphStatuses") ?? Object.keys(evidenceStates).join(",");
   const kinds = params.get("graphKinds") ?? Object.keys(relationKinds).join(",");
   const includeSelf = params.get("graphSelf") !== "false";
@@ -114,7 +114,7 @@ export default function GraphWorkspace({ projectId, snapshotId, generationId, re
       <option value="PACKAGE">包依赖</option><option value="TYPE">类型关系</option><option value="CLASS">类图</option><option value="STRUCTURE">项目结构图</option><option value="CALL">局部调用</option></select></label>
     <label>搜索图节点<input aria-label="搜索图节点" value={query} maxLength={200} onChange={event => navigate({ graphQuery: event.target.value })}/></label>
     <label>布局方向<select aria-label="布局方向" value={direction} onChange={event => graphNavigate({ graphDirection: event.target.value })}><option value="LR">从左到右</option><option value="TB">从上到下</option></select></label>
-    <label>每页节点<select aria-label="每页节点" value={limit} onChange={event => navigate({ graphLimit: event.target.value })}><option value="20">20</option><option value="80">80</option><option value="200">200</option></select></label>
+    <label>每页节点<select aria-label="每页节点" value={limit} onChange={event => navigate({ graphLimit: event.target.value })}><option value="20">20</option><option value="40">40</option><option value="80">80</option><option value="200">200</option></select></label>
     <label>画布边上限<select aria-label="画布边上限" value={edgeLimit} onChange={event => navigate({ graphEdgeLimit: event.target.value })}><option value="300">300</option><option value="1000">1000</option></select></label>
     {packageId && view !== "STRUCTURE" && <button onClick={() => navigate({ graphPackage: "" })}>清除包范围</button>}
     <button onClick={() => setRevision(value => value + 1)}>重新读取当前代次</button>

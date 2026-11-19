@@ -7,7 +7,7 @@ npm.cmd ci --registry=https://registry.npmjs.org
 npm.cmd run dev
 ```
 
-打开 <http://127.0.0.1:5173>。API 代理至本机 8080。生产构建使用 `npm.cmd run build`，后端 Maven 构建会将 dist 打入可运行 JAR。
+打开 <http://127.0.0.1:5171>。API 代理至本机 8080。生产构建使用 `npm.cmd run build`，后端 Maven 构建会将 dist 打入可运行 JAR。
 
 端到端验证使用 `npx.cmd playwright test`，需要已运行的前后端、专用测试数据库与本机 Chrome。
 

@@ -23,6 +23,6 @@ codeatlas:
     timeout-seconds: ${CODEATLAS_AI_TIMEOUT:70}
   data: ${CODEATLAS_DATA:./data}
   allowed-roots: ${CODEATLAS_ALLOWED_ROOTS:}
-  allowed-origin: ${CODEATLAS_DEV_ORIGIN:http://127.0.0.1:5173}
+  allowed-origin: ${CODEATLAS_DEV_ORIGIN:http://127.0.0.1:5171}
   github:
     timeout-seconds: ${CODEATLAS_GITHUB_TIMEOUT:180}

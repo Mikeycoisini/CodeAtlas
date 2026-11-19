@@ -109,17 +109,21 @@ public class AiResultValidator {
             if (title.isBlank()) title = "项目知识点 " + (checked.size() + 1);
             var item = new LinkedHashMap<String, Object>();
             item.put("title", title); item.put("body", body);
-            item.put("code", clipped(output.get("code"), 8_000));
+            item.put("code", "");
             item.put("analysis", clipped(output.get("analysis"), 8_000));
             var source = allowed.get(String.valueOf(output.getOrDefault("sourceId", "")));
             if (source != null) {
                 int low = ((Number) source.get("startLine")).intValue();
                 int high = ((Number) source.get("endLine")).intValue();
-                int start = output.get("startLine") instanceof Number value ? value.intValue() : low;
-                int end = output.get("endLine") instanceof Number value ? value.intValue() : high;
+                int start = output.get("startLine") instanceof Number value && value.intValue()>0 ? value.intValue() : low;
+                int end = output.get("endLine") instanceof Number value && value.intValue()>0 ? value.intValue() : high;
                 item.put("sourceId", source.get("sourceId")); item.put("filePath", source.get("filePath"));
-                item.put("startLine", Math.max(low, Math.min(start, high)));
-                item.put("endLine", Math.max(low, Math.min(Math.max(start, end), high)));
+                if(start<low || end>high || end<start) throw schemaError();
+                var actual=sources.get((String)source.get("sourceId"));
+                String[] lines=((String)actual.get("content")).split("\\n",-1);
+                String code=String.join("\n",Arrays.copyOfRange(lines,start-low,end-low+1));
+                item.put("code",clipped(code,8_000));
+                item.put("startLine",start); item.put("endLine",end);
             } else {
                 item.put("sourceId", ""); item.put("filePath", ""); item.put("startLine", 0); item.put("endLine", 0);
             }

@@ -158,9 +158,10 @@ public class ReviewService {
     }
     public Map<String, Object> queue(boolean dueOnly, String query, String knowledgeId, String tag, int limit, int offset) {
         page(limit, offset); long now = clock.millis(); String term = query.toLowerCase(Locale.ROOT);
-        var rows = store.rows("SELECT s.card_id,s.due_at_ms,s.epoch,s.revision,l.title,l.payload,l.knowledge_id FROM review_states s JOIN learning_records l ON l.id=s.card_id WHERE l.deleted_at IS NULL AND s.suspended=FALSE ORDER BY s.due_at_ms,s.card_id");
+        var rows = store.rows("SELECT l.project_id,s.card_id,s.due_at_ms,s.epoch,s.revision,l.title,l.payload,l.knowledge_id FROM review_states s JOIN learning_records l ON l.id=s.card_id WHERE l.deleted_at IS NULL AND s.suspended=FALSE ORDER BY s.due_at_ms,s.card_id");
         var items = new ArrayList<Map<String, Object>>();
         for (var row : rows) {
+            if (!dev.codeatlas.learning.ProjectScope.matches(row.get("projectId"))) continue;
             var content = json.decode((String) row.remove("payload"));
             if (dueOnly && ((Number) row.get("dueAtMs")).longValue() > now) continue;
             if (!term.isEmpty() && !row.get("title").toString().toLowerCase(Locale.ROOT).contains(term)) continue;

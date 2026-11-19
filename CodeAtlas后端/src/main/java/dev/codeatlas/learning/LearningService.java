@@ -16,8 +16,9 @@ public class LearningService {
 
     public Map<String, Object> get(String kind, String id) {
         var row = store.one("SELECT * FROM learning_records WHERE kind=? AND id=? AND deleted_at IS NULL", kind, id);
+        if(!ProjectScope.matches(row.get("projectId"))) throw ApiException.missing();
         var result = sources.decode((String) row.get("payload"));
-        for (String name : List.of("id", "kind", "title", "revision", "createdAt", "updatedAt", "knowledgeId", "generationId")) result.put(name, row.get(name));
+        for (String name : List.of("id", "kind", "title", "revision", "createdAt", "updatedAt", "knowledgeId", "generationId", "projectId")) result.put(name, row.get(name));
         var links = store.rows("SELECT source_id FROM learning_sources WHERE record_id=? ORDER BY source_id", id);
         result.put("sourceIds", links.stream().map(link -> link.get("sourceId")).toList());
         result.put("sources", links.stream().map(link -> sources.get((String) link.get("sourceId"))).toList());
@@ -29,8 +30,8 @@ public class LearningService {
     public Map<String, Object> list(String kind, String query, int limit, int offset) {
         if (limit < 1 || limit > 100 || offset < 0) throw new ApiException(400, "INVALID_PAGE", "分页范围无效");
         String term = query.toLowerCase(Locale.ROOT);
-        var matching = store.rows("SELECT id,title,payload FROM learning_records WHERE kind=? AND deleted_at IS NULL ORDER BY updated_at DESC,id", kind)
-                .stream().filter(row -> (((String) row.get("title")) + " " + row.get("payload")).toLowerCase(Locale.ROOT).contains(term)).toList();
+        var matching = store.rows("SELECT id,title,payload,project_id FROM learning_records WHERE kind=? AND deleted_at IS NULL ORDER BY updated_at DESC,id", kind)
+                .stream().filter(row -> ProjectScope.matches(row.get("projectId"))).filter(row -> (((String) row.get("title")) + " " + row.get("payload")).toLowerCase(Locale.ROOT).contains(term)).toList();
         var items = matching.stream().skip(offset).limit(limit).map(row -> get(kind, (String) row.get("id"))).toList();
         return Map.of("items", items, "total", matching.size(), "limit", limit, "offset", offset);
     }
@@ -38,7 +39,8 @@ public class LearningService {
     public Map<String, Object> create(String kind, Map<String, Object> input) {
         String key = text(input, "idempotencyKey", 100, true);
         var normalized = normalize(kind, input, true);
-        String hash = SnapshotScanner.hash(store.encode(normalized));
+        String owner = ProjectScope.owner(store, normalized.get("sourceIds"), normalized.get("knowledgeId"));
+        String hash = SnapshotScanner.hash(store.encode(ProjectScope.current().isBlank() ? normalized : java.util.Arrays.asList(owner, normalized)));
         try {
             return store.transaction(() -> {
                 var previous = store.rows("SELECT * FROM mutation_requests WHERE idempotency_key=?", key);
@@ -47,8 +49,8 @@ public class LearningService {
                 store.update("INSERT INTO mutation_requests(idempotency_key,operation,body_hash,result_id,created_at) VALUES(?,?,?,?,?)", key, kind, hash, id, AtlasStore.now());
                 validateLinks(normalized, null);
                 String title = (String) normalized.get(kind.equals("CARD") ? "question" : "title");
-                store.update("INSERT INTO learning_records(id,kind,title,payload,knowledge_id,generation_id,revision,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,?)",
-                        id, kind, title, store.encode(normalized), blankToNull(normalized.get("knowledgeId")), blankToNull(normalized.get("generationId")), AtlasStore.now(), AtlasStore.now());
+                store.update("INSERT INTO learning_records(id,kind,title,payload,knowledge_id,generation_id,revision,created_at,updated_at,project_id) VALUES(?,?,?,?,?,?,1,?,?,?)",
+                        id, kind, title, store.encode(normalized), blankToNull(normalized.get("knowledgeId")), blankToNull(normalized.get("generationId")), AtlasStore.now(), AtlasStore.now(), owner);
                 saveLinks(id, normalized);
                 return get(kind, id);
             });
@@ -71,6 +73,7 @@ public class LearningService {
             var existing = store.one("SELECT * FROM learning_records WHERE id=? AND kind=? AND deleted_at IS NULL FOR UPDATE", id, kind);
             if (((Number) existing.get("revision")).intValue() != revision) throw new ApiException(409, "REVISION_CONFLICT", "资料已被其他操作更新，请保留草稿并重新加载");
             validateLinks(normalized, existing.get("knowledgeId"));
+            ProjectScope.unchanged(existing.get("projectId"), ProjectScope.owner(store, normalized.get("sourceIds"), normalized.get("knowledgeId")));
             String title = (String) normalized.get(kind.equals("CARD") ? "question" : "title");
             store.update("UPDATE learning_records SET title=?,payload=?,knowledge_id=?,generation_id=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?",
                     title, store.encode(normalized), blankToNull(normalized.get("knowledgeId")), blankToNull(normalized.get("generationId")), AtlasStore.now(), id, revision);
@@ -90,7 +93,7 @@ public class LearningService {
 
     private Map<String, Object> normalize(String kind, Map<String, Object> input, boolean creating) {
         var allowed = new HashSet<>(List.of("idempotencyKey", "revision", "sourceIds", "tags"));
-        allowed.addAll(kind.equals("CARD") ? List.of("knowledgeId", "question", "answer", "explanation", "codeExample", "notes")
+        allowed.addAll(kind.equals("CARD") ? List.of("knowledgeId", "question", "answer", "explanation", "codeExample", "notes", "generationId")
                 : List.of("title", "body", "generationId", "type"));
         if (!allowed.containsAll(input.keySet())) throw new ApiException(400, "INVALID_FIELD", "资料包含不支持的字段");
         var normalized = new LinkedHashMap<String, Object>();
@@ -107,13 +110,14 @@ public class LearningService {
             normalized.put("type", input.containsKey("type") ? text(input, "type", 40, false) : "NOTE");
             normalized.put("generationId", text(input, "generationId", 36, false));
         }
+        normalized.put("generationId", text(input, "generationId", 36, false));
         normalized.put("tags", strings(input, "tags", 10, 32));
         List<String> sourceIds = strings(input, "sourceIds", 50, 36);
         String generation = (String) normalized.get("generationId");
         if (generation != null && !generation.isEmpty()) {
             var row = store.one("SELECT result_json,context_id FROM ai_generations WHERE id=? AND status='SUCCEEDED'", generation);
             var context = sources.decode((String) store.one("SELECT context_json FROM ai_contexts WHERE id=?", row.get("contextId")).get("contextJson"));
-            if (!"EXPLANATION".equals(context.getOrDefault("operation", "EXPLANATION"))) throw new ApiException(400, "GENERATION_TYPE_MISMATCH", "此生成用途对应训练资料");
+            if ((!Set.of("EXPLANATION", "TRAINING_QUESTIONS").contains(context.getOrDefault("operation", "EXPLANATION"))) || (kind.equals("DOCUMENT") && "TRAINING_QUESTIONS".equals(context.get("operation")))) throw new ApiException(400, "GENERATION_TYPE_MISMATCH", "此生成用途对应训练资料");
             var result = sources.decode((String) row.get("resultJson"));
             Object citations = result.get("citations");
             var verified = new LinkedHashSet<String>();

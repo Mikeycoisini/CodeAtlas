@@ -127,6 +127,7 @@ public class GitHubFetcher {
             Path checkout = owned.resolve("repo");
             var command = new ArrayList<>(List.of(
                     "git",
+                    "-c", "core.longpaths=true",
                     "-c", "core.hooksPath=",
                     "-c", "core.fsmonitor=false",
                     "-c", "core.untrackedCache=false",
@@ -197,17 +198,21 @@ public class GitHubFetcher {
         environment.put("USERPROFILE", home.toString());
         environment.put("XDG_CONFIG_HOME", home.resolve(".config").toString());
         environment.put("GIT_CONFIG_NOSYSTEM", "1");
-        environment.put("GIT_CONFIG_GLOBAL", home.resolve(".gitconfig").toString());
+        // Git reads global config before core.longpaths; use the platform null device.
+        environment.put("GIT_CONFIG_GLOBAL", System.getProperty("os.name").startsWith("Windows") ? "NUL" : "/dev/null");
         environment.put("GIT_TERMINAL_PROMPT", "0");
         environment.put("GCM_INTERACTIVE", "never");
         environment.put("GIT_LFS_SKIP_SMUDGE", "1");
         environment.put("LC_ALL", "C");
         environment.put("LANG", "C");
+        environment.put("GIT_CONFIG_COUNT", "1");
+        environment.put("GIT_CONFIG_KEY_0", "core.longpaths");
+        environment.put("GIT_CONFIG_VALUE_0", "true");
         if (token != null && !token.isBlank()) {
             // Keep the token out of argv and URLs; Git reads this temporary HTTP header from the child environment.
-            environment.put("GIT_CONFIG_COUNT", "1");
-            environment.put("GIT_CONFIG_KEY_0", "http.extraHeader");
-            environment.put("GIT_CONFIG_VALUE_0", "Authorization: Bearer " + token);
+            environment.put("GIT_CONFIG_COUNT", "2");
+            environment.put("GIT_CONFIG_KEY_1", "http.extraHeader");
+            environment.put("GIT_CONFIG_VALUE_1", "Authorization: Bearer " + token);
         }
         var process = builder.start();
         var output = new ByteArrayOutputStream();

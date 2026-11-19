@@ -36,7 +36,7 @@ npm.cmd ci --registry=https://registry.npmjs.org
 npm.cmd run dev
 ```
 
-浏览器打开 <http://127.0.0.1:5173>。点击“导入项目”，输入具有读取权限的绝对目录，确认授权后创建快照，再点击“开始索引”。通过“文件”或“符号”页签浏览源码，选择符号查看证据与关系。
+浏览器打开 <http://127.0.0.1:5171>。点击“导入项目”，输入具有读取权限的绝对目录，确认授权后创建快照，再点击“开始索引”。通过“文件”或“符号”页签浏览源码，选择符号查看证据与关系。
 
 可先导入 `D:\CodeAtlas\CodeAtlas后端\test-fixtures\spring-sample`。其中 Broken.java 故意包含语法错误，索引应为“部分成功”。搜索 `pay(String)`，选择 PaymentService 的重载方法可查看事务注解及调用证据。
 
@@ -64,7 +64,7 @@ java -jar target/codeatlas-0.4.6.jar
 | CODEATLAS_PORT | 8080 |
 | CODEATLAS_DATA | 当前后端目录下 data |
 | CODEATLAS_ALLOWED_ROOTS | 空值表示接受用户在本机界面明确提交的目录，可用分号分隔限定根目录 |
-| CODEATLAS_DEV_ORIGIN | http://127.0.0.1:5173 |
+| CODEATLAS_DEV_ORIGIN | http://127.0.0.1:5171 |
 | CODEATLAS_GITHUB_TIMEOUT | 180，公开 GitHub 仓库浅克隆超时秒数 |
 
 服务绑定 127.0.0.1。每次启动产生本机会话令牌。前端自动建立会话，手工 API 调用需先 GET /api/session，再通过 X-CodeAtlas-Token 传入令牌。数据目录有单实例文件锁，应配套使用独立数据库和同一数据目录。

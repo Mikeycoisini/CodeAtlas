@@ -171,6 +171,7 @@ export default function App() {
     return () => removeEventListener("keydown", closeOnEscape);
   }, [importOpen]);
   const [importPath, setImportPath] = useState("");
+  const [selectingDirectory,setSelectingDirectory]=useState(false);
   const [importSource, setImportSource] = useState<"LOCAL" | "GITHUB">("LOCAL");
   const [importUrl, setImportUrl] = useState("");
   const [importRef, setImportRef] = useState("");
@@ -498,6 +499,7 @@ export default function App() {
     instance.setPosition({ lineNumber: line, column: 1 });
   };
   const resetSelection = (clearTask = true) => {
+    setAiSelection(undefined);setAiOpen(false);
     setFileId("");
     setContent(null);
     setSelectedSymbol(null);
@@ -587,8 +589,22 @@ export default function App() {
     }
   };
 
+  const chooseDirectory = async () => {
+    setImportSource("LOCAL");setAuthorized(false);setSelectingDirectory(true);
+    try {
+      const result=await post<{status:string;path?:string;reason?:string}>("/local-directories/select",{});
+      if(result.status==="selected" && result.path) setImportPath(result.path);
+      if(result.status==="unavailable") setError(result.reason??"目录选择不可用，请手工输入路径");
+    } catch(e) {report(e);} finally {setSelectingDirectory(false);}
+  };
   const currentSource: SourceSelection | undefined = selectedSymbol && snapshotId && (generation || symbols?.generationId)
-    ? { snapshotId, generationId: generation || symbols!.generationId!, fileId: selectedSymbol.fileId, symbolId: selectedSymbol.id } : undefined;
+    ? { snapshotId, generationId: generation || symbols!.generationId!, fileId: selectedSymbol.fileId, symbolId: selectedSymbol.id } : fileId && snapshotId ? { snapshotId, generationId: generation || undefined, fileId } : undefined;
+  const selectSharedSource = (source: SourceSelection, symbol: Symbol | null) => {
+    setAiSelection(source);setSelectedSymbol(symbol);setFileId(source.fileId ?? "");
+    if(source.generationId) setGeneration(source.generationId);
+    navigate({fileId:source.fileId??"",symbolId:symbol?.id??"",line:String(source.startLine??1)});
+  };
+  useEffect(()=>{setAiSelection(undefined);setAiOpen(false);},[projectId,snapshotId]);
   const aiSource = aiSelection === undefined ? currentSource : (aiSelection ?? undefined);
   const aiSourceLabel = aiSource?.symbolId && selectedSymbol?.id === aiSource.symbolId
     ? `${selectedSymbol.signature} · ${files.find(file => file.id === aiSource.fileId)?.path ?? selectedSymbol.qualifiedName}`
@@ -684,7 +700,6 @@ export default function App() {
             </button>
           </div>
         )}
-        {view === "explore" || view === "graph" ? <>
         <section className="toolbar">
           <label>
             <span>项目</span>
@@ -759,6 +774,7 @@ export default function App() {
           {view === "graph" && snapshot?.publishedGeneration && generation && snapshot.publishedGeneration !== generation &&
             <button onClick={() => { navigate({ ...graphDefaults, generationId: snapshot.publishedGeneration! }); dispatchEvent(new PopStateEvent("popstate")); }}>查看最新索引</button>}
         </section>
+        {view === "explore" || view === "graph" ? <>
         {task && (
           <section
             className={`task-strip ${task.status.toLowerCase()}`}
@@ -1069,7 +1085,7 @@ export default function App() {
             </aside>
           </main>
         )}
-        </> : view === "architecture" ? <Suspense fallback={<p role="status">正在加载架构总览…</p>}><ArchitectureWorkspace key={`${projectId}|${snapshotId}`} snapshotId={snapshotId} generationId={generation} refreshRevision={revision} onSource={goSource} theme={theme}/></Suspense> : view === "analysis" ? <Suspense fallback={<p role="status">正在加载代码分析…</p>}><AnalysisWorkspace projectId={projectId} snapshotId={snapshotId} generationId={generation} selectedSymbol={selectedSymbol} onSource={goSource} theme={theme}/></Suspense> : view === "ai" ? <Suspense fallback={<p role="status">正在加载 AI 助手…</p>}><AiAssistantWorkspace snapshotId={snapshotId} currentSource={aiSource} sourceLabel={aiSourceLabel} onOpenAi={openAi} onNavigate={changeView} onOpenLibrary={kind => changeView(kind)} theme={theme}/></Suspense> : view === "github" ? <Suspense fallback={<p role="status">正在加载 GitHub…</p>}><GitHubWorkspace projectId={projectId} theme={theme}/></Suspense> : view === "training" ? <TrainingWorkspace onSource={goSource}/> : view === "reviews" ? <ReviewWorkspace onSource={goSource}/> : view === "progress" ? <ProgressWorkspace onSource={goSource}/> : view === "guides" ? <GuideWorkspace onSource={goSource}/> : <LearningLibrary key={view} kind={view} currentSource={currentSource} onSource={goSource} onOpenRecord={openLearning} onReview={id => studyUrl("reviews", { reviewCardId: id })}/>}
+        </> : view === "architecture" ? <Suspense fallback={<p role="status">正在加载架构总览…</p>}><ArchitectureWorkspace key={`${projectId}|${snapshotId}`} snapshotId={snapshotId} generationId={generation} refreshRevision={revision} onSource={goSource} theme={theme}/></Suspense> : view === "analysis" ? <Suspense fallback={<p role="status">正在加载代码分析…</p>}><AnalysisWorkspace key={`${projectId}|${snapshotId}`} onSelect={selectSharedSource} projectId={projectId} snapshotId={snapshotId} generationId={generation} selectedSymbol={selectedSymbol} onSource={goSource} theme={theme}/></Suspense> : view === "ai" ? <Suspense fallback={<p role="status">正在加载 AI 助手…</p>}><AiAssistantWorkspace key={`${projectId}|${snapshotId}`} generationId={generation} onSelect={selectSharedSource} snapshotId={snapshotId} currentSource={aiSource} sourceLabel={aiSourceLabel} onOpenAi={openAi} onNavigate={changeView} onOpenLibrary={kind => changeView(kind)} theme={theme}/></Suspense> : view === "github" ? <Suspense fallback={<p role="status">正在加载 GitHub…</p>}><GitHubWorkspace projectId={projectId} theme={theme}/></Suspense> : view === "training" ? <TrainingWorkspace key={`${projectId}|${snapshotId}`} onSource={goSource}/> : view === "reviews" ? <ReviewWorkspace key={projectId} onSource={goSource}/> : view === "progress" ? <ProgressWorkspace key={projectId} onSource={goSource}/> : view === "guides" ? <GuideWorkspace key={projectId} onSource={goSource}/> : <LearningLibrary key={`${view}|${projectId}`} kind={view} currentSource={currentSource} onSource={goSource} onOpenRecord={openLearning} onReview={id => studyUrl("reviews", { reviewCardId: id })}/>}
         <footer>
           <span>{view === "explore" ? project?.sourcePath ?? "CodeAtlas 本地项目探索" : view === "architecture" ? "架构总览来自固定快照" : "学习资料保存在本机"}</span>
           <span>
@@ -1102,7 +1118,7 @@ export default function App() {
                 role="tab"
                 aria-selected={importSource === "LOCAL"}
                 className={importSource === "LOCAL" ? "primary" : ""}
-                onClick={() => { setImportSource("LOCAL"); setAuthorized(false); }}
+                disabled={selectingDirectory} onClick={() => void chooseDirectory()}
               >
                 本地目录
               </button>
@@ -1124,7 +1140,7 @@ export default function App() {
             <form onSubmit={importProject}>
               {importSource === "LOCAL" ? (
                 <label className="path-label">
-                  项目目录
+                  项目目录 <button type="button" disabled={selectingDirectory} onClick={() => void chooseDirectory()}>{selectingDirectory ? "正在选择…" : "浏览目录"}</button>
                   <input
                     autoFocus
                     required

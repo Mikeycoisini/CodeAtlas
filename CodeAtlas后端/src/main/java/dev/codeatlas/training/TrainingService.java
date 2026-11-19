@@ -45,7 +45,7 @@ public class TrainingService {
     }
 
     public Map<String, Object> createTask(Map<String, Object> input) {
-        return createTask(input, "");
+        return createTask(input, dev.codeatlas.learning.ProjectScope.current());
     }
     public Map<String, Object> createTask(Map<String, Object> input, String projectId) {
         var normalized = definitions.normalize(input);
@@ -97,6 +97,7 @@ public class TrainingService {
     }
     public Map<String, Object> task(String id, boolean editor) {
         var row = store.one("SELECT * FROM training_tasks WHERE id=? AND deleted_at IS NULL", id);
+        if(!dev.codeatlas.learning.ProjectScope.matches(row.get("projectId"))) throw ApiException.missing();
         var result = taskVersion(id, ((Number) row.get("revision")).intValue(), editor);
         result.put("createdAt", row.get("createdAt")); result.put("updatedAt", row.get("updatedAt")); return result;
     }
@@ -107,7 +108,7 @@ public class TrainingService {
         result.put("id", id); result.put("revision", revision); result.put("definitionDigest", row.get("definitionDigest")); return result;
     }
     public Map<String, Object> listTasks(String query, String status, int limit, int offset) {
-        return listTasks(query, status, "", limit, offset);
+        return listTasks(query, status, dev.codeatlas.learning.ProjectScope.current(), limit, offset);
     }
     public Map<String, Object> listTasks(String query, String status, String projectId, int limit, int offset) {
         page(limit, offset);
@@ -157,7 +158,7 @@ public class TrainingService {
         result.put("aiFeedback", feedback); return result;
     }
     public Map<String, Object> listAttempts(String taskId, int limit, int offset) {
-        return listAttempts(taskId, "", limit, offset);
+        return listAttempts(taskId, dev.codeatlas.learning.ProjectScope.current(), limit, offset);
     }
     public Map<String, Object> listAttempts(String taskId, String projectId, int limit, int offset) {
         page(limit, offset);
