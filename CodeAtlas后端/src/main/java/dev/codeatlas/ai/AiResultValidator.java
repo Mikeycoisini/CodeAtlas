@@ -73,11 +73,10 @@ public class AiResultValidator {
         result.put("source", "AI_ASSISTED");
     }
     private void validateQuestions(Map<String, Object> result, Map<String, Object> context, String contextJson) {
-        keys(result, "title", "goal", "constraints", "acceptanceCriteria", "questions", "citations", "uncertainties");
+        requiredKeys(result, "title", "goal", "constraints", "acceptanceCriteria", "questions", "citations", "uncertainties");
         Object rawQuestions = result.get("questions");
-        if (!(rawQuestions instanceof List<?> questions) || questions.isEmpty() || questions.size() > 5) throw schemaError();
+        if (!(rawQuestions instanceof List<?> questions) || questions.isEmpty() || questions.size() > 10) throw schemaError();
         var params = TrainingDefinition.map(context.get("training"));
-        if (questions.size() != ((Number) params.get("questionCount")).intValue()) throw schemaError();
         var identified = new ArrayList<Map<String, Object>>(); int index = 0;
         for (Object raw : questions) {
             var question = new LinkedHashMap<>(TrainingDefinition.map(raw));
@@ -86,12 +85,52 @@ public class AiResultValidator {
             question.put("id", UUID.nameUUIDFromBytes((SnapshotScanner.hash(contextJson) + ":" + index++).getBytes(StandardCharsets.UTF_8)).toString());
             identified.add(question);
         }
+        result.put("knowledge", knowledge(result.get("knowledge"), context));
         var task = new LinkedHashMap<String, Object>();
         for (String key : List.of("title", "goal", "constraints", "acceptanceCriteria")) task.put(key, result.get(key));
         task.put("status", "ACTIVE"); task.put("questions", identified);
         task.put("sourceIds", ((List<?>) context.get("sources")).stream().map(source -> TrainingDefinition.map(source).get("sourceId")).toList());
         try { result.put("questions", training.normalize(task).get("questions")); }
         catch (ApiException e) { throw schemaError(); }
+    }
+    private List<Map<String, Object>> knowledge(Object raw, Map<String, Object> context) {
+        if (!(raw instanceof List<?> list)) return List.of();
+        var allowed = new HashMap<String, Map<?, ?>>();
+        if (context.get("sources") instanceof List<?> originals)
+            for (Object original : originals) if (original instanceof Map<?, ?> source) allowed.put((String) source.get("sourceId"), source);
+        var checked = new ArrayList<Map<String, Object>>();
+        for (Object entry : list) {
+            if (checked.size() >= 8) break;
+            if (!(entry instanceof Map<?, ?>)) continue;
+            var output = sources.decode(store.encode(entry));
+            String body = clipped(output.get("body"), 16_000);
+            String title = clipped(output.get("title"), 200);
+            if (title.isBlank() && body.isBlank()) continue;
+            if (title.isBlank()) title = "项目知识点 " + (checked.size() + 1);
+            var item = new LinkedHashMap<String, Object>();
+            item.put("title", title); item.put("body", body);
+            item.put("code", clipped(output.get("code"), 8_000));
+            item.put("analysis", clipped(output.get("analysis"), 8_000));
+            var source = allowed.get(String.valueOf(output.getOrDefault("sourceId", "")));
+            if (source != null) {
+                int low = ((Number) source.get("startLine")).intValue();
+                int high = ((Number) source.get("endLine")).intValue();
+                int start = output.get("startLine") instanceof Number value ? value.intValue() : low;
+                int end = output.get("endLine") instanceof Number value ? value.intValue() : high;
+                item.put("sourceId", source.get("sourceId")); item.put("filePath", source.get("filePath"));
+                item.put("startLine", Math.max(low, Math.min(start, high)));
+                item.put("endLine", Math.max(low, Math.min(Math.max(start, end), high)));
+            } else {
+                item.put("sourceId", ""); item.put("filePath", ""); item.put("startLine", 0); item.put("endLine", 0);
+            }
+            checked.add(item);
+        }
+        return checked;
+    }
+    private static String clipped(Object raw, int limit) {
+        if (!(raw instanceof String text)) return "";
+        String value = text.strip();
+        return value.length() > limit ? value.substring(0, limit) : value;
     }
     private List<Map<String, Object>> citations(Object raw, Map<String, Object> context) {
         if (!(raw instanceof List<?> list) || list.size() > 24 || !(context.get("sources") instanceof List<?> originals)) throw schemaError();
@@ -120,6 +159,7 @@ public class AiResultValidator {
         return checked;
     }
     private void keys(Map<String, Object> input, String... allowed) { if (!input.keySet().equals(Set.of(allowed))) throw schemaError(); }
+    private void requiredKeys(Map<String, Object> input, String... required) { if (!input.keySet().containsAll(Set.of(required))) throw schemaError(); }
     private void requiredText(Map<String, Object> input, String field, int limit) {
         if (!(input.get(field) instanceof String text) || text.isBlank() || text.length() > limit) throw schemaError();
     }

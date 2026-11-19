@@ -4,15 +4,15 @@ import AiConsentPreview from "./AiConsentPreview";
 import { api, statusText } from "../api";
 import { mutate, explanationBody, type Provider, type PreparedContext, type Generation, type SourceSelection, type EvidenceSource, type LearningKind, type LearningRecord } from "./learningApi";
 
-type Props = { selection?: SourceSelection; sourceIds?: string[]; onClose: () => void;
+type Props = { selection?: SourceSelection; sourceIds?: string[]; purpose?: string; autoPrepare?: boolean; onClose: () => void;
   onSource: (source: EvidenceSource, line?: number) => void; onOpenRecord: (kind: LearningKind, id: string) => void };
 const isActive = (generation: Generation | null) => !!generation && ["QUEUED", "RUNNING"].includes(generation.status);
 
-export default function AiPanel({ selection, sourceIds, onClose, onSource, onOpenRecord }: Props) {
+export default function AiPanel({ selection, sourceIds, purpose: initialPurpose = "METHOD_EXPLANATION", autoPrepare = false, onClose, onSource, onOpenRecord }: Props) {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [question, setQuestion] = useState("");
   const [depth, setDepth] = useState("STANDARD");
-  const [purpose, setPurpose] = useState("METHOD_EXPLANATION");
+  const [purpose, setPurpose] = useState(initialPurpose);
   const [context, setContext] = useState<PreparedContext | null>(null);
   const [generation, setGeneration] = useState<Generation | null>(null);
   const [parent, setParent] = useState("");
@@ -24,6 +24,7 @@ export default function AiPanel({ selection, sourceIds, onClose, onSource, onOpe
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const generationKey = useRef(crypto.randomUUID());
+  const autoPrepared = useRef(false);
   const saveKeys = useRef({ documents: crypto.randomUUID(), knowledge: crypto.randomUUID() });
   const report = (error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setError(error instanceof Error ? error.message : String(error)); };
   useEffect(() => {
@@ -70,6 +71,13 @@ export default function AiPanel({ selection, sourceIds, onClose, onSource, onOpe
     } catch (error) { report(error); }
     finally { setBusy(false); }
   };
+  useEffect(() => {
+    if (!autoPrepare || autoPrepared.current || provider === null) return;
+    if (context || generation || busy) return;
+    if (!selection && !sourceIds?.length) return;
+    autoPrepared.current = true;
+    void prepare();
+  }, [autoPrepare, provider, context, generation, selection?.snapshotId, selection?.symbolId, selection?.fileId]);
   const generate = async () => {
     if (!context || !agreed) return;
     setBusy(true); setError("");

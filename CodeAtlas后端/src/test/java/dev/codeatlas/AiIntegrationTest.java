@@ -220,7 +220,7 @@ class AiIntegrationTest {
         assertThat(result.get("citations").get(0).get("verificationStatus").asText()).isEqualTo("VERIFIED");
         assertThat(call(HttpMethod.POST, "/api/documents", Map.of("title", "wrong type", "body", "text", "generationId", done.get("id").asText(), "idempotencyKey", UUID.randomUUID().toString())).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         Map<String, Object> taskBody = JSON.convertValue(result, new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {});
-        taskBody.remove("citations"); taskBody.remove("uncertainties"); taskBody.remove("usage");
+        taskBody.remove("citations"); taskBody.remove("uncertainties"); taskBody.remove("usage"); taskBody.remove("knowledge");
         taskBody.put("sourceIds", List.of(sourceId)); taskBody.put("generationId", done.get("id").asText()); taskBody.put("status", "ACTIVE"); taskBody.put("idempotencyKey", UUID.randomUUID().toString());
         var task = ok(HttpMethod.POST, "/api/training/tasks", taskBody);
         var attempt = ok(HttpMethod.POST, "/api/training/tasks/" + task.get("id").asText() + "/attempts", Map.of("idempotencyKey", UUID.randomUUID().toString()));
@@ -287,7 +287,7 @@ class AiIntegrationTest {
         var task = generate(consent(preview, "ALLOW")); var done = waitFor("/api/ai/generations/" + task.get("id").asText());
         assertThat(done.get("result").get("citations").get(0).get("verificationStatus").asText()).isEqualTo("INVALID");
         Map<String, Object> body = JSON.convertValue(done.get("result"), new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {});
-        body.remove("citations"); body.remove("uncertainties"); body.remove("usage"); body.put("generationId", done.get("id").asText());
+        body.remove("citations"); body.remove("uncertainties"); body.remove("usage"); body.remove("knowledge"); body.put("generationId", done.get("id").asText());
         body.put("sourceIds", List.of(sourceId)); body.put("status", "ACTIVE"); body.put("idempotencyKey", UUID.randomUUID().toString());
         assertThat(call(HttpMethod.POST, "/api/training/tasks", body).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         mode = "NORMAL";

@@ -23,7 +23,7 @@ public class TrainingAiController {
     @PostMapping("/ai/contexts") public Object questions(@RequestBody Map<String, Object> input) {
         fields(input, "sourceIds", "goal", "questionCount", "formats", "depth");
         int count = SourceEvidenceService.integer(input, "questionCount", 3);
-        if (count < 1 || count > 5) throw invalid("AI出题数量须为1至5");
+        if (count < 1 || count > 10) throw invalid("AI出题数量须为1至10");
         var formats = LearningService.strings(input, "formats", 3, 40);
         if (formats.isEmpty()) formats = List.of("SINGLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER");
         if (!Set.of("SINGLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER").containsAll(formats)) throw invalid("出题格式无效");
@@ -35,6 +35,25 @@ public class TrainingAiController {
             store.update("INSERT INTO training_ai_requests(context_id,operation,created_at) VALUES(?,'TRAINING_QUESTIONS',?)", context.get("id"), AtlasStore.now());
             return context;
         });
+    }
+    @PostMapping("/ai/generations/{id}/task")
+    public Object createTask(@PathVariable String id, @RequestBody Map<String, Object> input) {
+        fields(input, "idempotencyKey");
+        String key = text(input, "idempotencyKey", 100, true);
+        var generation = store.one("SELECT * FROM ai_generations WHERE id=? AND status='SUCCEEDED'", id);
+        var context = json.decode((String) store.one("SELECT context_json FROM ai_contexts WHERE id=?", generation.get("contextId")).get("contextJson"));
+        if (!"TRAINING_QUESTIONS".equals(context.get("operation"))) throw invalid("该生成记录不是出题结果");
+        var result = json.decode((String) generation.get("resultJson"));
+        var sourceIds = ((List<?>) context.get("sources")).stream().map(source -> map(source).get("sourceId")).toList();
+        var body = new LinkedHashMap<String, Object>();
+        for (String field : List.of("title", "goal", "constraints", "acceptanceCriteria")) body.put(field, result.get(field));
+        body.put("questions", result.get("questions"));
+        body.put("sourceIds", sourceIds);
+        body.put("generationId", id);
+        body.put("status", "DRAFT");
+        body.put("tags", List.of("AI"));
+        body.put("idempotencyKey", key);
+        return training.createTask(body);
     }
     @PostMapping("/attempts/{id}/questions/{questionId}/ai-context") public Object feedback(@PathVariable String id, @PathVariable String questionId, @RequestBody Map<String, Object> input) {
         fields(input, "question", "sourceIds", "depth");

@@ -35,6 +35,7 @@ export default function LearningLibrary({ kind, currentSource, onSource, onOpenR
   const selectionVersion = useRef(0);
   const select = (id: string) => { selectionVersion.current++; setSelectedId(id); setSourceChecks({}); };
   const [record, setRecord] = useState<LearningRecord | null>(null);
+  const [linkedCards, setLinkedCards] = useState<LearningRecord[]>([]);
   const seed = useRef(initialDraft(kind));
   const [draft, setDraft] = useState<Draft | null>(() => seed.current ? { ...blank(), ...seed.current } : null);
   const [creating, setCreating] = useState(!!seed.current);
@@ -66,6 +67,14 @@ export default function LearningLibrary({ kind, currentSource, onSource, onOpenR
     const timer = setTimeout(() => listRecords(kind, query, offset, controller.signal).then(setPage).catch(report), 180);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [kind, query, offset, revision]);
+  useEffect(() => {
+    if (kind !== "knowledge" || !selectedId) { setLinkedCards([]); return; }
+    const controller = new AbortController();
+    api<Page<LearningRecord>>("/cards?limit=100&offset=0", { signal: controller.signal })
+      .then(items => { if (mounted.current) setLinkedCards(items.items.filter(item => item.knowledgeId === selectedId)); })
+      .catch(() => { if (mounted.current) setLinkedCards([]); });
+    return () => controller.abort();
+  }, [kind, selectedId, revision]);
   useEffect(() => {
     if (!selectedId) { setRecord(null); if (!creating) setDraft(null); return; }
     const controller = new AbortController();
@@ -148,18 +157,34 @@ export default function LearningLibrary({ kind, currentSource, onSource, onOpenR
     sessionStorage.removeItem(key);
   }, []);
 
-  return <main className="learning-workspace">
-    <aside className="learning-list"><div className="learning-list-heading"><h1>{names[kind]}</h1><button className="primary" onClick={() => start()} disabled={busy}><Plus size={14}/>新建{names[kind]}</button></div>
+  const cardMode = kind === "cards";
+  return <main className={`learning-workspace ${cardMode ? "cards-mode" : ""}`}>
+    {!cardMode && <aside className="learning-list"><div className="learning-list-heading"><h1>{names[kind]}</h1><button className="primary" onClick={() => start()} disabled={busy}><Plus size={14}/>新建{names[kind]}</button></div>
       <div className="search"><Search size={14}/><input aria-label={`搜索${names[kind]}`} placeholder="搜索标题、内容或标签…" value={query} onChange={e => { setQuery(e.target.value); setOffset(0); }}/></div>
       <div className="learning-list-items">{page?.items.map(item => <button disabled={busy} className={`learning-list-item ${selectedId === item.id ? "selected" : ""}`} key={item.id} onClick={() => { recordUrl(kind, item.id); select(item.id); setCreating(false); setMessage(""); }}><strong>{item.title}</strong><p>{(item.body ?? item.answer ?? "").slice(0, 120)}</p><small>{item.tags.join(" · ") || names[kind]} · {new Date(item.updatedAt).toLocaleDateString("zh-CN")}</small></button>)}
         {!page?.items.length && <p className="hint">{query ? "没有匹配资料" : `还没有${names[kind]}，可以直接创建或从源码解释保存。`}</p>}</div>
       <div className="list-pagination"><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>上一页</button><span>共 {page?.total ?? 0} 条</span><button disabled={!page || offset + 30 >= page.total} onClick={() => setOffset(offset + 30)}>下一页</button></div>
-    </aside>
+    </aside>}
     <section className="learning-editor">
       {error && <p className="learning-error" role="alert">{error}</p>}
       {message && <p className="learning-success" role="status">{message}</p>}
-      {!draft ? <div className="code-empty"><h2>选择或新建{names[kind]}</h2><p>学习资料与源码版本一起保存，手工编辑随时可用。</p></div> : <>
-        <div className="learning-editor-heading"><h2>{creating ? `新建${names[kind]}` : names[kind]}<span>{dirty ? "未保存" : record ? `版本 ${record.revision}` : "草稿"}</span></h2><div className="button-row">{selectedId && <button onClick={remove} disabled={busy || loading}><Trash2 size={14}/>删除</button>}<button className="primary" onClick={save} disabled={busy || loading}><Save size={14}/>保存{names[kind]}</button></div></div>
+      {!draft ? (cardMode ? <section className="card-wall">
+        <div className="card-wall-heading"><div><h2>卡片墙</h2><p>每张卡片同时保留八股文知识、源码片段与代码解析；点击卡片可编辑或加入复习。</p></div>
+          <div className="button-row"><div className="search"><Search size={14}/><input aria-label="搜索卡片" placeholder="搜索问题、知识、代码或标签…" value={query} onChange={e => { setQuery(e.target.value); setOffset(0); }}/></div>
+            <button className="primary" onClick={() => start()} disabled={busy}><Plus size={14}/>新建卡片</button></div></div>
+        {page?.items.length ? <div className="card-grid">{page.items.map(item => <article className="study-card" key={item.id} role="button" tabIndex={0}
+          onClick={() => { recordUrl(kind, item.id); select(item.id); setCreating(false); setMessage(""); }}
+          onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); recordUrl(kind, item.id); select(item.id); setCreating(false); setMessage(""); } }}>
+          <header><span>{item.tags[0] ?? "八股文"}</span><small>{new Date(item.updatedAt).toLocaleDateString("zh-CN")}</small></header>
+          <h3>{item.question}</h3>
+          {item.answer && <p className="study-card-answer">{item.answer}</p>}
+          {item.codeExample && <pre className="study-card-code">{item.codeExample}</pre>}
+          {item.explanation && <div className="study-card-analysis"><span>代码解析</span><p>{item.explanation}</p></div>}
+          <footer><span>{item.sources.length} 个源码来源</span><span>{item.knowledgeId ? "已关联知识" : "独立卡片"}</span></footer>
+        </article>)}</div> : <p className="hint">{query ? "没有匹配卡片" : "还没有卡片；AI 项目出题保存后会自动生成知识卡片，也可以手工新建。"}</p>}
+        <div className="list-pagination"><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>上一页</button><span>共 {page?.total ?? 0} 张</span><button disabled={!page || offset + 30 >= page.total} onClick={() => setOffset(offset + 30)}>下一页</button></div>
+      </section> : <div className="code-empty"><h2>选择或新建{names[kind]}</h2><p>学习资料与源码版本一起保存，手工编辑随时可用。</p></div>) : <>
+        <div className="learning-editor-heading"><h2>{creating ? `新建${names[kind]}` : names[kind]}<span>{dirty ? "未保存" : record ? `版本 ${record.revision}` : "草稿"}</span></h2><div className="button-row">{cardMode && <button onClick={() => { recordUrl(kind); select(""); setDraft(null); setCreating(false); }}>返回卡片墙</button>}{selectedId && <button onClick={remove} disabled={busy || loading}><Trash2 size={14}/>删除</button>}<button className="primary" onClick={save} disabled={busy || loading}><Save size={14}/>保存{names[kind]}</button></div></div>
         <fieldset disabled={busy || loading} className="learning-fields">
           {kind === "cards" && record && onReview && <div className="button-row"><button disabled={dirty} onClick={() => openReview(true)}>加入复习</button><button onClick={() => openReview(false)}>复习历史</button>{dirty && <small>保存卡片更改后可加入复习。</small>}</div>}
           {kind === "cards" ? <><label>问题<input aria-label="问题" value={draft.question} onChange={e => edit("question", e.target.value)} maxLength={500}/></label><label>答案<textarea aria-label="答案" value={draft.answer} onChange={e => edit("answer", e.target.value)} rows={6} maxLength={16000}/></label><label>解释<textarea aria-label="卡片解释" value={draft.explanation} onChange={e => edit("explanation", e.target.value)} rows={3}/></label><label>代码实例<textarea className="code-textarea" aria-label="代码实例" value={draft.codeExample} onChange={e => edit("codeExample", e.target.value)} rows={4}/></label><label>个人笔记<textarea aria-label="个人笔记" value={draft.notes} onChange={e => edit("notes", e.target.value)} rows={3}/></label>{record?.knowledgeDeleted && <p className="hint">关联知识已删除，这张卡片保留独立内容与源码来源。</p>}</>
@@ -172,6 +197,10 @@ export default function LearningLibrary({ kind, currentSource, onSource, onOpenR
               </span></div><button type="button" onClick={() => checkCurrent(source)}>检查当前源码</button><button type="button" onClick={() => onSource(source)}>定位源码<ArrowRight size={12}/></button><button type="button" aria-label="移除来源" onClick={() => { setDraft({ ...draft, sources: draft.sources.filter(s => s.id !== source.id) }); setDirty(true); }}>移除</button></div>)}
             {!draft.sources.length && <p className="hint">可关联不同项目的固定快照。</p>}
           </section>
+          {kind === "knowledge" && <section className="record-sources linked-cards"><div className="record-sources-heading"><h3>关联卡片 <span>{linkedCards.length}</span></h3></div>
+            {linkedCards.map(item => <button type="button" className="linked-card" key={item.id} onClick={() => onOpenRecord("cards", item.id)}><strong>{item.question}</strong><small>{(item.answer ?? "").slice(0, 120)}</small></button>)}
+            {!linkedCards.length && <p className="hint">还没有关联卡片；AI 项目出题保存时会自动为每个知识点生成一张卡片。</p>}
+          </section>}
         </fieldset>
         <div className="learning-bottom-actions">{kind === "documents" && <button onClick={() => derive("knowledge")} disabled={busy}>提炼知识<ArrowRight size={13}/></button>}{kind === "knowledge" && <button onClick={() => derive("cards")} disabled={busy || !selectedId || dirty}>从知识创建卡片<ArrowRight size={13}/></button>}{kind !== "cards" && !!draft.sources.length && <button onClick={() => setExplain(true)} disabled={busy}><Sparkles size={14}/>基于来源生成说明</button>}</div>
       </>}

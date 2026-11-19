@@ -10,7 +10,10 @@ export type TrainingTask = { id: string; revision: number; title: string; goal: 
 export type Answer = { questionId: string; value: string | boolean | null; skipped: boolean };
 export type Feedback = { strengths: string[]; gaps: string[]; explanation: string; suggestedVerdict: string; source: string;
   citations: Citation[]; uncertainties: string[] };
-export type Candidate = { title: string; goal: string; constraints: string; acceptanceCriteria: string; questions: Question[]; citations: Citation[]; uncertainties: string[] };
+export type KnowledgePoint = { title: string; body: string; code: string; analysis: string;
+  sourceId?: string; filePath?: string; startLine?: number; endLine?: number };
+export type Candidate = { title: string; goal: string; constraints: string; acceptanceCriteria: string; knowledge?: KnowledgePoint[];
+  questions: Question[]; citations: Citation[]; uncertainties: string[] };
 export type TrainingGeneration = { id: string; contextId: string; operation: string; status: string; result: Candidate | Feedback | null;
   provider: Provider; errorCode?: string; message?: string };
 export type Attempt = { id: string; revision: number; taskId: string; taskRevision: number; status: string; definitionDigest: string;

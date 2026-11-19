@@ -86,7 +86,10 @@ public class AiClient {
             Map<String, Object> result = json.readValue(bytes, new TypeReference<LinkedHashMap<String, Object>>() {});
             if (status != 200) {
                 String code = result.get("code") instanceof String value && value.matches("[A-Z_]{1,80}") ? value : "AI_SERVICE_ERROR";
-                throw new ApiException(status >= 400 && status < 600 ? status : 502, code, "AI 请求失败，请根据错误码检查模型配置或稍后重试");
+                String message = result.get("message") instanceof String value && !value.isBlank()
+                        ? value.substring(0, Math.min(240, value.length()))
+                        : "AI 请求失败，请根据错误码检查模型配置或稍后重试";
+                throw new ApiException(status >= 400 && status < 600 ? status : 502, code, message);
             }
             return result;
         } catch (SocketTimeoutException e) {

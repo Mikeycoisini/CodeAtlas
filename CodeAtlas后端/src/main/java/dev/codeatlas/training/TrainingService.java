@@ -45,10 +45,21 @@ public class TrainingService {
     }
 
     public Map<String, Object> createTask(Map<String, Object> input) {
+        return createTask(input, "");
+    }
+    public Map<String, Object> createTask(Map<String, Object> input, String projectId) {
         var normalized = definitions.normalize(input);
-        return once(text(input, "idempotencyKey", 100, true), "TRAINING_TASK_CREATE", normalized, () -> {
+        String owner = projectId.isBlank() ? null : projectId;
+        if (owner != null) store.one("SELECT id FROM projects WHERE id=?", owner);
+        for (Object sourceId : (List<?>) normalized.get("sourceIds")) {
+            String sourceProject = (String) json.get((String) sourceId).get("projectId");
+            if (owner == null) owner = sourceProject;
+            else if (!owner.equals(sourceProject)) throw invalid("任务来源不属于当前项目");
+        }
+        final String taskProject = owner;
+        return once(text(input, "idempotencyKey", 100, true), "TRAINING_TASK_CREATE", taskProject == null ? normalized : Map.of("projectId", taskProject, "task", normalized), () -> {
             String id = AtlasStore.uuid(); String time = now();
-            store.update("INSERT INTO training_tasks(id,title,status,revision,created_at,updated_at) VALUES(?,?,?,1,?,?)", id, normalized.get("title"), normalized.get("status"), time, time);
+            store.update("INSERT INTO training_tasks(id,title,status,revision,project_id,created_at,updated_at) VALUES(?,?,?,1,?,?,?)", id, normalized.get("title"), normalized.get("status"), taskProject, time, time);
             saveVersion(id, 1, normalized);
             return task(id, true);
         }, id -> task(id, true));
@@ -58,6 +69,8 @@ public class TrainingService {
         return store.transaction(() -> {
             var row = store.one("SELECT * FROM training_tasks WHERE id=? AND deleted_at IS NULL FOR UPDATE", id);
             revision(row, expected);
+            if (row.get("projectId") != null) for (Object sourceId : (List<?>) normalized.get("sourceIds"))
+                if (!row.get("projectId").equals(json.get((String) sourceId).get("projectId"))) throw invalid("任务来源不属于当前项目");
             int next = expected + 1; saveVersion(id, next, normalized);
             store.update("UPDATE training_tasks SET title=?,status=?,revision=?,updated_at=? WHERE id=?", normalized.get("title"), normalized.get("status"), next, now(), id);
             return task(id, true);
@@ -94,10 +107,15 @@ public class TrainingService {
         result.put("id", id); result.put("revision", revision); result.put("definitionDigest", row.get("definitionDigest")); return result;
     }
     public Map<String, Object> listTasks(String query, String status, int limit, int offset) {
+        return listTasks(query, status, "", limit, offset);
+    }
+    public Map<String, Object> listTasks(String query, String status, String projectId, int limit, int offset) {
         page(limit, offset);
         if (!status.isEmpty() && !Set.of("DRAFT", "ACTIVE", "ARCHIVED").contains(status)) throw invalid("任务状态过滤无效");
         String term = query.toLowerCase(Locale.ROOT);
-        var matching = store.rows("SELECT t.*,r.payload FROM training_tasks t JOIN training_task_revisions r ON r.task_id=t.id AND r.revision=t.revision WHERE t.deleted_at IS NULL ORDER BY t.updated_at DESC,t.id")
+        var matching = (projectId.isBlank()
+                ? store.rows("SELECT t.*,r.payload FROM training_tasks t JOIN training_task_revisions r ON r.task_id=t.id AND r.revision=t.revision WHERE t.deleted_at IS NULL ORDER BY t.updated_at DESC,t.id")
+                : store.rows("SELECT t.*,r.payload FROM training_tasks t JOIN training_task_revisions r ON r.task_id=t.id AND r.revision=t.revision WHERE t.deleted_at IS NULL AND t.project_id=? ORDER BY t.updated_at DESC,t.id", projectId))
                 .stream().filter(row -> (status.isEmpty() || status.equals(row.get("status"))) && (((String) row.get("title")) + row.get("payload")).toLowerCase(Locale.ROOT).contains(term)).toList();
         var items = matching.stream().skip(offset).limit(limit).map(row -> {
             var definition = json.decode((String) row.get("payload")); var result = new LinkedHashMap<>(row); result.remove("payload");
@@ -117,8 +135,10 @@ public class TrainingService {
         fields(input, "idempotencyKey");
         return once(text(input, "idempotencyKey", 100, true), "TRAINING_ATTEMPT_START", Map.of("taskId", taskId), () -> {
             var task = store.one("SELECT * FROM training_tasks WHERE id=? AND deleted_at IS NULL FOR UPDATE", taskId);
-            if (!"ACTIVE".equals(task.get("status"))) throw new ApiException(409, "TASK_NOT_ACTIVE", "仅已发布任务可开始新的尝试");
+            if ("ARCHIVED".equals(task.get("status"))) throw new ApiException(409, "TASK_ARCHIVED", "已归档任务不能开始新的尝试");
             var version = store.one("SELECT * FROM training_task_revisions WHERE task_id=? AND revision=? FOR UPDATE", taskId, task.get("revision"));
+            if ("DRAFT".equals(task.get("status")) && questions(json.decode((String) version.get("payload"))).isEmpty())
+                throw new ApiException(409, "TASK_EMPTY_DRAFT", "草稿还没有题目，请先编辑并添加题目");
             String id = AtlasStore.uuid(); String time = now();
             store.update("INSERT INTO training_attempts(id,task_id,task_revision,definition_digest,revision,status,answers_payload,created_at,updated_at) VALUES(?,?,?,?,1,'DRAFT',?,?,?)",
                     id, taskId, task.get("revision"), version.get("definitionDigest"), store.encode(Map.of("items", List.of())), time, time);
@@ -137,8 +157,13 @@ public class TrainingService {
         result.put("aiFeedback", feedback); return result;
     }
     public Map<String, Object> listAttempts(String taskId, int limit, int offset) {
+        return listAttempts(taskId, "", limit, offset);
+    }
+    public Map<String, Object> listAttempts(String taskId, String projectId, int limit, int offset) {
         page(limit, offset);
-        var rows = store.rows("SELECT a.id,a.task_id,a.task_revision,a.status,a.created_at,a.submitted_at,r.payload FROM training_attempts a JOIN training_task_revisions r ON r.task_id=a.task_id AND r.revision=a.task_revision ORDER BY a.created_at DESC,a.id")
+        var rows = (projectId.isBlank()
+                ? store.rows("SELECT a.id,a.task_id,a.task_revision,a.status,a.created_at,a.submitted_at,r.payload FROM training_attempts a JOIN training_task_revisions r ON r.task_id=a.task_id AND r.revision=a.task_revision ORDER BY a.created_at DESC,a.id")
+                : store.rows("SELECT a.id,a.task_id,a.task_revision,a.status,a.created_at,a.submitted_at,r.payload FROM training_attempts a JOIN training_task_revisions r ON r.task_id=a.task_id AND r.revision=a.task_revision JOIN training_tasks t ON t.id=a.task_id WHERE t.project_id=? ORDER BY a.created_at DESC,a.id", projectId))
                 .stream().filter(row -> taskId.isEmpty() || taskId.equals(row.get("taskId"))).toList();
         var items = rows.stream().skip(offset).limit(limit).map(row -> { var item = new LinkedHashMap<>(row); item.put("title", json.decode((String) item.remove("payload")).get("title")); return item; }).toList();
         return Map.of("items", items, "total", rows.size(), "limit", limit, "offset", offset);

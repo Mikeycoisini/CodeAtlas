@@ -73,7 +73,13 @@ public class LocalAccessFilter extends OncePerRequestFilter {
         try {
             URI uri = URI.create(origin);
             int port = uri.getPort() < 0 ? 80 : uri.getPort();
-            return origin.equals(developmentOrigin) || (uri.getScheme().equals("http") && uri.getHost().equals(request.getServerName()) && port == request.getServerPort());
+            URI configured = URI.create(developmentOrigin);
+            boolean developmentLoopback = "http".equals(uri.getScheme()) && "http".equals(configured.getScheme())
+                    && Set.of("localhost", "127.0.0.1").contains(uri.getHost())
+                    && Set.of("localhost", "127.0.0.1").contains(configured.getHost())
+                    && port == configured.getPort();
+            return origin.equals(developmentOrigin) || developmentLoopback
+                    || ("http".equals(uri.getScheme()) && uri.getHost().equals(request.getServerName()) && port == request.getServerPort());
         } catch (Exception e) { return false; }
     }
     private void reject(HttpServletResponse response, int status, String code, String message) throws IOException {

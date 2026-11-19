@@ -45,7 +45,7 @@ class ServiceTests(unittest.IsolatedAsyncioTestCase):
         citation = self.output()["citations"]
         outputs = {
             "TRAINING_QUESTIONS": {"title": "Reading task", "goal": "Read a declaration", "constraints": "Use evidence", "acceptanceCriteria": "Explain it",
-                "questions": [{"category": "CODE_READING", "format": "TRUE_FALSE", "prompt": "Is A declared?", "options": [], "correctAnswer": True,
+                "knowledge": [], "questions": [{"category": "CODE_READING", "format": "TRUE_FALSE", "prompt": "Is A declared?", "options": [], "correctAnswer": True,
                     "referenceExplanation": "The source declares A", "hints": ["Look at the class name"]}], "citations": citation, "uncertainties": []},
             "TRAINING_FEEDBACK": {"strengths": ["Identifies declaration"], "gaps": [], "explanation": "Based on the frozen answer", "suggestedVerdict": "PARTIAL", "citations": citation, "uncertainties": []},
             "PRACTICE_FEEDBACK": {"strengths": ["Submits an independent change"], "gaps": ["Add boundary tests"], "explanation": "Review the diff and user report", "suggestedVerdict": "PARTIAL", "citations": citation, "uncertainties": ["User-provided report"]}}

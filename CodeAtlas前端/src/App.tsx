@@ -129,6 +129,9 @@ export default function App() {
   }, [theme]);
   const [view, setView] = useState<View>(parseView(initial.get("view")));
   const [aiOpen, setAiOpen] = useState(!!initial.get("aiGenerationId"));
+  const [aiPurpose, setAiPurpose] = useState("METHOD_EXPLANATION");
+  const [aiAutoPrepare, setAiAutoPrepare] = useState(false);
+  const [aiSelection, setAiSelection] = useState<SourceSelection | null | undefined>(undefined);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectId, setProjectId] = useState(initial.get("projectId") ?? "");
@@ -586,6 +589,16 @@ export default function App() {
 
   const currentSource: SourceSelection | undefined = selectedSymbol && snapshotId && (generation || symbols?.generationId)
     ? { snapshotId, generationId: generation || symbols!.generationId!, fileId: selectedSymbol.fileId, symbolId: selectedSymbol.id } : undefined;
+  const aiSource = aiSelection === undefined ? currentSource : (aiSelection ?? undefined);
+  const aiSourceLabel = aiSource?.symbolId && selectedSymbol?.id === aiSource.symbolId
+    ? `${selectedSymbol.signature} · ${files.find(file => file.id === aiSource.fileId)?.path ?? selectedSymbol.qualifiedName}`
+    : aiSource?.fileId ? `整个文件 · ${files.find(file => file.id === aiSource.fileId)?.path ?? aiSource.fileId}` : "";
+  const openAi = (purpose = "METHOD_EXPLANATION", selection?: SourceSelection, autoPrepare = false) => {
+    setAiPurpose(purpose);
+    setAiAutoPrepare(autoPrepare);
+    if (selection) setAiSelection(selection);
+    setAiOpen(true);
+  };
   const changeView = (next: View) => {
     const params = new URLSearchParams(location.search); params.set("view", next); params.delete("recordId"); params.delete("aiGenerationId");
     for (const key of [...params.keys()]) if (/^(training|review|progress|guide|graph|arch|analysis)/.test(key)) params.delete(key);
@@ -1056,7 +1069,7 @@ export default function App() {
             </aside>
           </main>
         )}
-        </> : view === "architecture" ? <Suspense fallback={<p role="status">正在加载架构总览…</p>}><ArchitectureWorkspace key={`${projectId}|${snapshotId}`} snapshotId={snapshotId} generationId={generation} refreshRevision={revision} onSource={goSource} theme={theme}/></Suspense> : view === "analysis" ? <Suspense fallback={<p role="status">正在加载代码分析…</p>}><AnalysisWorkspace projectId={projectId} snapshotId={snapshotId} generationId={generation} selectedSymbol={selectedSymbol} onSource={goSource} theme={theme}/></Suspense> : view === "ai" ? <Suspense fallback={<p role="status">正在加载 AI 助手…</p>}><AiAssistantWorkspace hasSource={!!currentSource} onOpenAi={() => setAiOpen(true)} onNavigate={changeView} theme={theme}/></Suspense> : view === "github" ? <Suspense fallback={<p role="status">正在加载 GitHub…</p>}><GitHubWorkspace projectId={projectId} theme={theme}/></Suspense> : view === "training" ? <TrainingWorkspace onSource={goSource}/> : view === "reviews" ? <ReviewWorkspace onSource={goSource}/> : view === "progress" ? <ProgressWorkspace onSource={goSource}/> : view === "guides" ? <GuideWorkspace onSource={goSource}/> : <LearningLibrary key={view} kind={view} currentSource={currentSource} onSource={goSource} onOpenRecord={openLearning} onReview={id => studyUrl("reviews", { reviewCardId: id })}/>}
+        </> : view === "architecture" ? <Suspense fallback={<p role="status">正在加载架构总览…</p>}><ArchitectureWorkspace key={`${projectId}|${snapshotId}`} snapshotId={snapshotId} generationId={generation} refreshRevision={revision} onSource={goSource} theme={theme}/></Suspense> : view === "analysis" ? <Suspense fallback={<p role="status">正在加载代码分析…</p>}><AnalysisWorkspace projectId={projectId} snapshotId={snapshotId} generationId={generation} selectedSymbol={selectedSymbol} onSource={goSource} theme={theme}/></Suspense> : view === "ai" ? <Suspense fallback={<p role="status">正在加载 AI 助手…</p>}><AiAssistantWorkspace snapshotId={snapshotId} currentSource={aiSource} sourceLabel={aiSourceLabel} onOpenAi={openAi} onNavigate={changeView} onOpenLibrary={kind => changeView(kind)} theme={theme}/></Suspense> : view === "github" ? <Suspense fallback={<p role="status">正在加载 GitHub…</p>}><GitHubWorkspace projectId={projectId} theme={theme}/></Suspense> : view === "training" ? <TrainingWorkspace onSource={goSource}/> : view === "reviews" ? <ReviewWorkspace onSource={goSource}/> : view === "progress" ? <ProgressWorkspace onSource={goSource}/> : view === "guides" ? <GuideWorkspace onSource={goSource}/> : <LearningLibrary key={view} kind={view} currentSource={currentSource} onSource={goSource} onOpenRecord={openLearning} onReview={id => studyUrl("reviews", { reviewCardId: id })}/>}
         <footer>
           <span>{view === "explore" ? project?.sourcePath ?? "CodeAtlas 本地项目探索" : view === "architecture" ? "架构总览来自固定快照" : "学习资料保存在本机"}</span>
           <span>
@@ -1064,7 +1077,7 @@ export default function App() {
           </span>
         </footer>
       </div>
-      {aiOpen && <AiPanel selection={currentSource} onClose={() => setAiOpen(false)} onSource={goSource} onOpenRecord={openLearning}/>}
+      {aiOpen && <AiPanel selection={aiSource} purpose={aiPurpose} autoPrepare={aiAutoPrepare} onClose={() => { setAiOpen(false); setAiAutoPrepare(false); }} onSource={goSource} onOpenRecord={openLearning}/>}
       {importOpen && (
         <div className="modal-backdrop" onClick={() => setImportOpen(false)}>
           <section

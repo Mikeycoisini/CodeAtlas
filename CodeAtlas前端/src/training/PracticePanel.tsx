@@ -40,7 +40,7 @@ export default function PracticePanel({ task }: { task: TrainingTask }) {
     <p>从任务关联的快照创建独立目录，在本地 IDE 修改后保存提交。测试由你在外部环境运行，结果按用户提供的报告记录。</p>
     <p className="hint">可把代码提交或测试报告关联到知识点。提交本身只作为成果，不单独计入掌握；PASSED/FAILED 报告分别作为正/负证据，ERROR/TIMEOUT 不计为能力失败。</p>
     {error && <p className="learning-error" role="alert">{error}</p>}
-    <div className="button-row"><button disabled={busy || task.status !== "ACTIVE" || !task.sources[0]?.snapshotId} onClick={() => run(async () => {
+    <div className="button-row"><button disabled={busy || task.status === "ARCHIVED" || !task.sources[0]?.snapshotId} onClick={() => run(async () => {
       const item = await mutate<Workspace>("/practice/workspaces", { taskId: task.id, snapshotId: task.sources[0].snapshotId, idempotencyKey: createKey.current });
       createKey.current = crypto.randomUUID(); await refresh(); setWorkspaceId(item.id); setSubmission(null);
     })}>创建独立练习副本</button></div>

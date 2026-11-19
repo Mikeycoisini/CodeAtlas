@@ -67,14 +67,57 @@ class Choice(StrictModel):
     text: str = Field(min_length=1, max_length=500)
 
 
-class TrainingQuestion(StrictModel):
-    category: Literal["CODE_READING", "CALL_CHAIN", "ERROR_JUDGMENT"]
+class TrainingQuestion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    category: str = Field(min_length=1, max_length=40)
     format: Literal["SINGLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER"]
     prompt: str = Field(min_length=1, max_length=4000)
-    options: list[Choice] = Field(max_length=6)
+    options: list[Choice] = Field(default_factory=list, max_length=6)
     correctAnswer: str | StrictBool
     referenceExplanation: str = Field(min_length=1, max_length=8000)
-    hints: list[Annotated[str, Field(min_length=1, max_length=1000)]] = Field(max_length=5)
+    hints: list[Annotated[str, Field(min_length=1, max_length=1000)]] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize(cls, data):
+        if not isinstance(data, dict):
+            return data
+        raw = dict(data)
+        raw.pop("id", None)
+        category = str(raw.get("category") or "").strip().upper()
+        if category not in {"CODE_READING", "CALL_CHAIN", "ERROR_JUDGMENT"}:
+            raw["category"] = "CODE_READING"
+        fmt = raw.get("format")
+        options = raw.get("options") or []
+        if fmt == "SINGLE_CHOICE":
+            normalized = []
+            for index, option in enumerate(options):
+                letter = chr(ord("A") + index)
+                if isinstance(option, str):
+                    normalized.append({"id": letter, "text": option})
+                elif isinstance(option, dict):
+                    oid = str(option.get("id") or letter)
+                    text = option.get("text") or option.get("label") or option.get("value") or ""
+                    normalized.append({"id": oid, "text": str(text)})
+            raw["options"] = normalized
+            ids = [item["id"] for item in normalized]
+            answer = raw.get("correctAnswer", raw.get("correct_answer"))
+            if isinstance(answer, str) and answer not in ids:
+                key = answer.strip()
+                if len(key) == 1 and key.isalpha():
+                    position = ord(key.upper()) - ord("A")
+                    if 0 <= position < len(ids):
+                        raw["correctAnswer"] = ids[position]
+                elif key.isdigit() and 1 <= int(key) <= len(ids):
+                    raw["correctAnswer"] = ids[int(key) - 1]
+        else:
+            raw["options"] = []
+            if fmt == "TRUE_FALSE" and isinstance(raw.get("correctAnswer"), str):
+                raw["correctAnswer"] = raw["correctAnswer"].strip().lower() in {"true", "yes", "1", "对", "正确"}
+        if raw.get("hints") is None:
+            raw["hints"] = []
+        return raw
 
     @model_validator(mode="after")
     def valid_answer(self):
@@ -92,14 +135,69 @@ class TrainingQuestion(StrictModel):
         return self
 
 
-class TrainingQuestions(StrictModel):
+class KnowledgePoint(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    body: str = ""
+    code: str = ""
+    analysis: str = ""
+    sourceId: str = ""
+    startLine: int = 1
+    endLine: int = 1
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize(cls, data):
+        if not isinstance(data, dict):
+            return data
+        raw = dict(data)
+        limits = {"title": 200, "body": 16_000, "code": 8_000, "analysis": 8_000}
+        aliases = {"body": ("summary", "content", "knowledge"), "code": ("codeSnippet", "snippet"),
+                   "analysis": ("codeAnalysis", "explanation")}
+        for key, limit in limits.items():
+            value = raw.get(key)
+            if value is None:
+                for alias in aliases.get(key, ()):
+                    value = raw.get(alias)
+                    if value is not None:
+                        break
+            raw[key] = str(value).strip()[:limit] if value is not None else ""
+        raw["sourceId"] = str(raw.get("sourceId") or raw.get("source_id") or "").strip()[:100]
+        for key in ("startLine", "endLine"):
+            try:
+                raw[key] = max(1, int(raw.get(key) or 1))
+            except (TypeError, ValueError):
+                raw[key] = 1
+        if raw["endLine"] < raw["startLine"]:
+            raw["endLine"] = raw["startLine"]
+        return raw
+
+
+class TrainingQuestions(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     title: str = Field(min_length=1, max_length=200)
     goal: str = Field(min_length=1, max_length=4000)
-    constraints: str = Field(max_length=4000)
+    constraints: str = Field(default="", max_length=4000)
     acceptanceCriteria: str = Field(min_length=1, max_length=4000)
-    questions: list[TrainingQuestion] = Field(min_length=1, max_length=5)
-    citations: list[Citation] = Field(max_length=24)
-    uncertainties: list[TextPoint] = Field(max_length=20)
+    knowledge: list[KnowledgePoint] = Field(default_factory=list, max_length=8)
+    questions: list[TrainingQuestion] = Field(min_length=1, max_length=10)
+    citations: list[Citation] = Field(default_factory=list, max_length=24)
+    uncertainties: list[TextPoint] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_knowledge(cls, data):
+        if not isinstance(data, dict):
+            return data
+        raw = dict(data)
+        points = raw.get("knowledge")
+        if not isinstance(points, list):
+            raw["knowledge"] = []
+        else:
+            raw["knowledge"] = [item for item in points if isinstance(item, dict)][:8]
+        return raw
 
 
 class TrainingFeedback(StrictModel):

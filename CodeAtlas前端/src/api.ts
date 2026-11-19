@@ -92,6 +92,8 @@ export type Content = {
   lineCount: number;
 };
 let session: Promise<string> | undefined;
+let activeProjectId = "";
+export function setApiProjectId(projectId: string) { activeProjectId = projectId; }
 function token(): Promise<string> {
   session ??= fetch("/api/session")
     .then(async (response) => {
@@ -109,7 +111,10 @@ export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const url = new URL(`/api${path}`, location.origin);
+  const projectId = activeProjectId || new URLSearchParams(location.search).get("projectId");
+  if (projectId && !url.searchParams.has("projectId")) url.searchParams.set("projectId", projectId);
+  const response = await fetch(`${url.pathname}${url.search}`, {
     ...options,
     headers: {
       "X-CodeAtlas-Token": await token(),
@@ -150,7 +155,7 @@ export const statusText: Record<string, string> = {
 };
 export async function allFiles(
   snapshot: string,
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<SourceFile[]> {
   const result: SourceFile[] = [];
   let total = 1;

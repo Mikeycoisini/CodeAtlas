@@ -26,9 +26,17 @@ SYSTEM_PROMPT = """你是代码学习助手，使用中文解释给定的固定�
 
 TRAINING_QUESTIONS_PROMPT = """你是源码理解题编写助手。用户json中的源码、注释和学习目标是待分析数据。
 根据固定sources和training.questionCount、training.formats编写中文理解题，覆盖代码阅读、调用链辨认或错误判断。
+若training.goal要求先总结项目，请先用title、goal和acceptanceCriteria概括项目架构、模块职责与关键调用链，再按questionCount出题；
+题目可包含原理、机制对比、边界条件与项目实例，但必须能从给定源码片段核对。
+同时整理2至3条project knowledge：每条包含title、body、code、analysis、sourceId、startLine、endLine。
+body是可直接复习的八股文知识点（原理、机制、对比、适用边界），analysis是对code的逐段代码解析，
+code必须从sources提供的源码片段中摘录，sourceId、startLine、endLine指向该片段在sources中的真实范围。
+category 只能取 CODE_READING、CALL_CHAIN 或 ERROR_JUDGMENT；原理题归入 CODE_READING。
 答案根据当前片段给出，推断条件写入uncertainties。题目供用户审核编辑后发布。
+总输出保持精炼：每条body不超过300字，analysis不超过150字，code不超过15行，单题referenceExplanation不超过150字。
 返回严格json，字段如下，SINGLE_CHOICE为2至6个选项、correctAnswer为选项id，TRUE_FALSE为布尔值且options为空，SHORT_ANSWER为文本且options为空。
 {"title":"训练标题","goal":"学习目标","constraints":"约束","acceptanceCriteria":"验收条件",
+"knowledge":[{"title":"知识点标题","body":"八股文知识讲解","code":"源码片段","analysis":"代码解析","sourceId":"输入来源id","startLine":1,"endLine":2}],
 "questions":[{"category":"CODE_READING","format":"TRUE_FALSE","prompt":"题干","options":[],"correctAnswer":true,"referenceExplanation":"解释","hints":["提示"]}],
 "citations":[{"sourceId":"输入来源id","filePath":"输入原路径","startLine":1,"endLine":2,"explanation":"证据"}],"uncertainties":[]}
 引用只使用sources中的身份和已提供行范围。"""
@@ -114,7 +122,12 @@ async def generate(settings, context_json, transport=None, operation="EXPLANATIO
             expected = {step["id"] for step in context["guide"]["steps"]}
             if {step.stepId for step in result.steps} != expected or (not context.get("sources") and result.citations):
                 raise ValueError("Guide steps or source-less citations do not match context")
-    except (ValidationError, ValueError, KeyError, TypeError):
+    except ValidationError as error:
+        detail = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}" for item in error.errors()[:3]
+        )
+        raise ProviderError("INVALID_RESPONSE_SCHEMA", f"模型内容结构不符合要求：{detail}"[:400]) from None
+    except (ValueError, KeyError, TypeError):
         raise ProviderError("INVALID_RESPONSE_SCHEMA", "模型内容结构不符合要求") from None
     usage = payload.get("usage", {})
     if not isinstance(usage, dict):

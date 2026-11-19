@@ -51,7 +51,7 @@ public class PracticeService {
         String taskId = required(input, "taskId"), snapshotId = required(input, "snapshotId");
         return mutations.once(required(input, "idempotencyKey"), "PRACTICE_CREATE", Map.of("taskId", taskId, "snapshotId", snapshotId), () -> {
             var task = store.one("SELECT * FROM training_tasks WHERE id=? AND deleted_at IS NULL FOR UPDATE", taskId);
-            if (!"ACTIVE".equals(task.get("status"))) throw new ApiException(409, "TASK_NOT_ACTIVE", "仅已发布任务可创建练习副本");
+            if ("ARCHIVED".equals(task.get("status"))) throw new ApiException(409, "TASK_ARCHIVED", "已归档任务不能创建练习副本");
             int revision = ((Number) task.get("revision")).intValue();
             var version = json.decode((String) store.one("SELECT payload FROM training_task_revisions WHERE task_id=? AND revision=?", taskId, revision).get("payload"));
             var sources = (List<?>) version.get("sources");
